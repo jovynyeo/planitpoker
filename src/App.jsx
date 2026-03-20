@@ -737,7 +737,7 @@ export default function PlanningPoker() {
                   )}
                   <div className="field">
                     <div className="label">Your Name</div>
-                    <input value={myName} onChange={e => setMyName(e.target.value)} placeholder="e.g. Sarah, the QA wizard 🧙" autoFocus />
+                    <input value={myName} onChange={e => setMyName(e.target.value)} placeholder="e.g. Devi, the QA wizard 🧙" autoFocus />
                   </div>
                   <div className="field">
                     <div className="label">Your Role</div>
