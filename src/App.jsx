@@ -346,9 +346,24 @@ export default function PlanningPoker() {
       }, (payload) => {
         if (payload.new?.data) setRoom(payload.new.data);
       })
-      .subscribe();
+      .subscribe(async (status) => {
+        // Once subscribed, do an initial fetch so we always have latest state
+        if (status === "SUBSCRIBED") {
+          const latest = await fetchRoom(roomId);
+          if (latest) setRoom(latest);
+        }
+      });
 
-    return () => { supabase.removeChannel(channel); };
+    // Poll every 3s as a fallback in case realtime misses an event
+    const fallback = setInterval(async () => {
+      const latest = await fetchRoom(roomId);
+      if (latest) setRoom(latest);
+    }, 3000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(fallback);
+    };
   }, [roomId]);
 
   // ── MUTATE ROOM (read-modify-write to Supabase) ──────────
@@ -434,13 +449,29 @@ export default function PlanningPoker() {
   }
 
   async function leaveRoom() {
-    await mutateRoom(r => {
-      const players = { ...r.players };
+    // Fetch fresh state then remove self to avoid overwriting others
+    const current = await fetchRoom(roomId);
+    if (current) {
+      const players = { ...current.players };
       delete players[myId];
-      return { ...r, players };
-    });
+      await upsertRoom(roomId, { ...current, players });
+    }
     setRoomId(null); setRoom(null); setScreen("home");
   }
+
+  // Remove player if they close/refresh the tab
+  useEffect(() => {
+    if (!roomId) return;
+    const handleUnload = async () => {
+      const current = await fetchRoom(roomId);
+      if (!current) return;
+      const players = { ...current.players };
+      delete players[myId];
+      await upsertRoom(roomId, { ...current, players });
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
+  }, [roomId, myId]);
 
   function copyRoomId() {
     navigator.clipboard.writeText(roomId).catch(() => {});
