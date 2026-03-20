@@ -588,7 +588,6 @@ export default function PlanningPoker() {
         .reduce((acc, p) => { if (p.vote !== null) acc[p.vote] = (acc[p.vote] || 0) + 1; return acc; }, {})
     : {};
   const squadComplete = sq => revealed && Object.values(players).some(p => p.squad === sq && p.vote !== null);
-  const activeSquad = resolvedSquad;
   const isPO = myRole === "PO";
   const isMySquadTab = effectiveSquad === activeSquad;
   const isCreator = room?.creatorId === myId;
@@ -688,13 +687,14 @@ export default function PlanningPoker() {
 
           {/* ── GAME ── */}
           {screen === "game" && room && (
-            <div style={{
-              "--role-color": ROLE_COLORS[myRole]?.bg || "#00847F",
-              "--role-gradient": ROLE_COLORS[myRole]?.gradient || "linear-gradient(135deg,#00847F,#005F5B)",
-              "--role-glow": ROLE_COLORS[myRole]?.bgGlow || "rgba(0,132,127,0.15)",
-              "--role-bg-light": ROLE_COLORS[myRole]?.bgLight || "rgba(0,132,127,0.08)",
-              display: "contents",
-            }}>
+            <>
+              <div style={{
+                "--role-color": ROLE_COLORS[myRole]?.bg || "#00847F",
+                "--role-gradient": ROLE_COLORS[myRole]?.gradient || "linear-gradient(135deg,#00847F,#005F5B)",
+                "--role-glow": ROLE_COLORS[myRole]?.bgGlow || "rgba(0,132,127,0.15)",
+                "--role-bg-light": ROLE_COLORS[myRole]?.bgLight || "rgba(0,132,127,0.08)",
+                display:"contents"
+              }}>
               <div className="room-bar slide-up">
                 <div className="room-info">
                   <div className="room-code">
@@ -911,13 +911,13 @@ export default function PlanningPoker() {
                   ))}
                 </div>
               )}
+              </div>{/* end role css vars wrapper */}
             </>
           )}
         </div>
       </div>
 
       {showSnapshot && room && <SnapshotModal room={room} onClose={() => setShowSnapshot(false)} />}
-            </div>
     </>
   );
 }
