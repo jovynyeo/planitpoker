@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { supabase } from "./supabase";
 
-const FIBONACCI = ["?", "0", "0.5", "1", "2", "3", "5", "8", "13", "20", "☕"];
+const FIBONACCI = ["?", "0", "1", "2", "3", "5", "8", "13", "21", "34", "☕"];
 const SQUADS = ["RTIM", "QA", "ACM"];
 const ROLES = ["PO", "RTIM", "QA", "ACM"];
 
@@ -8,7 +9,7 @@ const SC = {
   teal:"#00847F",tealDark:"#005F5B",tealLight:"#00A99D",tealGlow:"rgba(0,132,127,0.12)",
   blue:"#003087",blueMid:"#004DB3",blueLight:"#1565C0",
   white:"#FFFFFF",offWhite:"#F4F7FA",silver:"#E8EDF2",steel:"#C5CED8",slate:"#6B7A8D",
-  ink:"#1A2B3C",inkLight:"#2D3F52",greenLight:"#E6F5F4",red:"#C0392B",redLight:"#FDECEA",gold:"#F0A500",
+  ink:"#1A2B3C",inkLight:"#2D3F52",greenLight:"#E6F5F4",red:"#C0392B",redLight:"#FDECEA",
 };
 
 const css = `
@@ -142,7 +143,6 @@ input::placeholder{color:${SC.steel};}
 .h-sq.QA{background:rgba(21,101,192,0.1);color:${SC.blueLight};}
 .h-sq.ACM{background:rgba(240,165,0,0.12);color:#c47f00;}
 .h-agreed{font-family:'DM Serif Display',serif;font-size:1.1rem;color:${SC.blue};font-weight:700;min-width:28px;text-align:right;}
-/* SNAPSHOT */
 .snap-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);}
 .snap-modal{background:white;border-radius:16px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
 .snap-modal-hdr{background:linear-gradient(135deg,${SC.blue},${SC.blueMid});padding:20px 28px;display:flex;align-items:center;justify-content:space-between;border-radius:16px 16px 0 0;}
@@ -173,6 +173,10 @@ input::placeholder{color:${SC.steel};}
 .snap-p-vote{font-family:'DM Serif Display',serif;font-size:1rem;color:${SC.teal};font-weight:700;min-width:32px;text-align:right;}
 .snap-footer{margin-top:20px;padding-top:14px;border-top:1px solid ${SC.silver};display:flex;justify-content:space-between;font-size:0.7rem;color:${SC.steel};}
 .snap-actions{padding:16px 28px 24px;display:flex;gap:10px;justify-content:flex-end;}
+.loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:12px;color:${SC.slate};}
+.spinner{width:36px;height:36px;border:3px solid ${SC.silver};border-top-color:${SC.teal};border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.error-box{background:#fdecea;border:1px solid rgba(192,57,43,0.3);border-radius:8px;padding:12px 16px;color:${SC.red};font-size:0.82rem;}
 @keyframes slideUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
 .slide-up{animation:slideUp 0.3s ease forwards;}
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
@@ -183,38 +187,69 @@ input::placeholder{color:${SC.steel};}
 @media(max-width:600px){.main{padding:16px 12px 60px;}.role-grid{grid-template-columns:repeat(2,1fr);}.snap-av{font-size:2rem;}}
 `;
 
-function genId(){return Math.random().toString(36).slice(2,8).toUpperCase();}
-function getRoomKey(id){return `poker-room-${id}`;}
-function loadRoom(id){try{const r=localStorage.getItem(getRoomKey(id));return r?JSON.parse(r):null;}catch{return null;}}
-function saveRoom(id,data){try{localStorage.setItem(getRoomKey(id),JSON.stringify({...data,_ts:Date.now()}));}catch{}}
-function median(nums){if(!nums.length)return null;const s=[...nums].sort((a,b)=>a-b);const m=Math.floor(s.length/2);return s.length%2?s[m]:((s[m-1]+s[m])/2);}
-function avg(nums){if(!nums.length)return null;return(nums.reduce((a,b)=>a+b,0)/nums.length).toFixed(1);}
-function squadStats(players,squad,revealed){
-  if(!revealed)return null;
-  const votes=Object.values(players).filter(p=>p.squad===squad&&p.vote!==null).map(p=>parseFloat(p.vote)).filter(v=>!isNaN(v));
-  return{avg:avg(votes),median:median(votes),count:votes.length};
+// ── HELPERS ──────────────────────────────────────────────────
+function genId() { return Math.random().toString(36).slice(2, 8).toUpperCase(); }
+function median(nums) {
+  if (!nums.length) return null;
+  const s = [...nums].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
+}
+function avg(nums) {
+  if (!nums.length) return null;
+  return (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(1);
+}
+function squadStats(players, squad, revealed) {
+  if (!revealed) return null;
+  const votes = Object.values(players)
+    .filter(p => p.squad === squad && p.vote !== null)
+    .map(p => parseFloat(p.vote)).filter(v => !isNaN(v));
+  return { avg: avg(votes), median: median(votes), count: votes.length };
 }
 
-function SnapshotModal({room,onClose}){
-  const snapRef=useRef(null);
-  function printSnap(){
-    const el=snapRef.current;if(!el)return;
-    const w=window.open("","_blank","width=700,height=900");
-    w.document.write(`<html><head><title>Estimation Snapshot</title><style>body{margin:0;font-family:sans-serif;}</style></head><body>${el.outerHTML}</body></html>`);
-    w.document.close();setTimeout(()=>{w.print();},600);
-  }
-  const players=room.players||{};
-  const story=room.story||"(No story title set)";
-  const agreed=room.agreedPoints;
-  const date=new Date().toLocaleString("en-SG",{dateStyle:"medium",timeStyle:"short"});
-  const squadsWithVotes=SQUADS.filter(sq=>Object.values(players).some(p=>p.squad===sq&&p.vote!==null));
+// ── SUPABASE HELPERS ─────────────────────────────────────────
+async function fetchRoom(id) {
+  const { data, error } = await supabase
+    .from("rooms").select("data").eq("id", id).single();
+  if (error) return null;
+  return data?.data || null;
+}
 
-  return(
-    <div className="snap-overlay fade-in" onClick={e=>e.target===e.currentTarget&&onClose()}>
+async function upsertRoom(id, roomData) {
+  await supabase.from("rooms").upsert({
+    id,
+    data: roomData,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+// ── SNAPSHOT MODAL ───────────────────────────────────────────
+function SnapshotModal({ room, onClose }) {
+  const snapRef = useRef(null);
+
+  function printSnap() {
+    const el = snapRef.current;
+    if (!el) return;
+    const w = window.open("", "_blank", "width=700,height=900");
+    w.document.write(`<html><head><title>Estimation Snapshot</title><style>body{margin:0;font-family:sans-serif;}</style></head><body>${el.outerHTML}</body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 600);
+  }
+
+  const players = room.players || {};
+  const story = room.story || "(No story title set)";
+  const agreed = room.agreedPoints;
+  const date = new Date().toLocaleString("en-SG", { dateStyle: "medium", timeStyle: "short" });
+  const squadsWithVotes = SQUADS.filter(sq =>
+    Object.values(players).some(p => p.squad === sq && p.vote !== null)
+  );
+
+  return (
+    <div className="snap-overlay fade-in" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="snap-modal slide-up">
         <div className="snap-modal-hdr">
           <h2>📸 Estimation Snapshot</h2>
-          <button className="btn btn-ghost" style={{color:"rgba(255,255,255,0.7)"}} onClick={onClose}>✕ Close</button>
+          <button className="btn btn-ghost" style={{ color: "rgba(255,255,255,0.7)" }} onClick={onClose}>✕ Close</button>
         </div>
         <div id="snap-card" ref={snapRef}>
           <div className="snap-hdr">
@@ -229,33 +264,35 @@ function SnapshotModal({room,onClose}){
           <div className="snap-agreed-box">
             <div>
               <div className="snap-al">Final Agreed Story Points</div>
-              <div className="snap-av">{agreed??<span style={{opacity:0.5,fontSize:"1.8rem"}}>Not set</span>}</div>
+              <div className="snap-av">{agreed ?? <span style={{ opacity: 0.5, fontSize: "1.8rem" }}>Not set</span>}</div>
             </div>
-            <div style={{textAlign:"right"}}>
-              <div style={{fontSize:"0.7rem",color:"rgba(255,255,255,0.6)",marginBottom:6}}>Squads estimated</div>
-              <div style={{display:"flex",gap:6}}>
-                {squadsWithVotes.map(sq=>(
-                  <span key={sq} style={{background:"rgba(255,255,255,0.15)",borderRadius:4,padding:"2px 8px",fontSize:"0.7rem",color:"white",fontWeight:700}}>{sq}</span>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.6)", marginBottom: 6 }}>Squads estimated</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {squadsWithVotes.map(sq => (
+                  <span key={sq} style={{ background: "rgba(255,255,255,0.15)", borderRadius: 4, padding: "2px 8px", fontSize: "0.7rem", color: "white", fontWeight: 700 }}>{sq}</span>
                 ))}
               </div>
             </div>
           </div>
           <div className="snap-squads">
-            {SQUADS.map(sq=>{
-              const stats=squadStats(players,sq,true);
-              const sqPlayers=Object.entries(players).filter(([,p])=>p.squad===sq).sort((a,b)=>a[1].name.localeCompare(b[1].name));
-              if(sqPlayers.length===0)return null;
-              return(
+            {SQUADS.map(sq => {
+              const stats = squadStats(players, sq, true);
+              const sqPlayers = Object.entries(players)
+                .filter(([, p]) => p.squad === sq)
+                .sort((a, b) => a[1].name.localeCompare(b[1].name));
+              if (sqPlayers.length === 0) return null;
+              return (
                 <div key={sq} className="snap-squad">
                   <div className={`snap-sq-hdr ${sq}`}>
                     <span>{sq} Squad</span>
-                    <span className="snap-sq-avg">Avg: {stats?.avg??"—"} · Median: {stats?.median??"—"}</span>
+                    <span className="snap-sq-avg">Avg: {stats?.avg ?? "—"} · Median: {stats?.median ?? "—"}</span>
                   </div>
                   <div className="snap-participants">
-                    {sqPlayers.map(([pid,p])=>(
+                    {sqPlayers.map(([pid, p]) => (
                       <div key={pid} className="snap-p">
                         <div><span className="snap-p-name">{p.name}</span><span className="snap-p-role"> · {p.role}</span></div>
-                        <div className="snap-p-vote">{p.vote??"—"}</div>
+                        <div className="snap-p-vote">{p.vote ?? "—"}</div>
                       </div>
                     ))}
                   </div>
@@ -277,93 +314,157 @@ function SnapshotModal({room,onClose}){
   );
 }
 
-export default function PlanningPoker(){
-  const [screen,setScreen]=useState("home");
-  const [myName,setMyName]=useState("");
-  const [myRole,setMyRole]=useState("");
-  const [roomInput,setRoomInput]=useState("");
-  const [roomId,setRoomId]=useState(null);
-  const [myId]=useState(()=>genId()+genId());
-  const [room,setRoom]=useState(null);
-  const [copied,setCopied]=useState(false);
-  const [storyInput,setStoryInput]=useState("");
-  const [editingStory,setEditingStory]=useState(false);
-  const [activeSquad,setActiveSquad]=useState("RTIM");
-  const [showSnapshot,setShowSnapshot]=useState(false);
+// ── MAIN APP ─────────────────────────────────────────────────
+export default function PlanningPoker() {
+  const [screen, setScreen] = useState("home");
+  const [myName, setMyName] = useState("");
+  const [myRole, setMyRole] = useState("");
+  const [roomInput, setRoomInput] = useState("");
+  const [roomId, setRoomId] = useState(null);
+  const [myId] = useState(() => genId() + genId());
+  const [room, setRoom] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [storyInput, setStoryInput] = useState("");
+  const [editingStory, setEditingStory] = useState(false);
+  const [activeSquad, setActiveSquad] = useState("RTIM");
+  const [showSnapshot, setShowSnapshot] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(()=>{
-    if(!roomId)return;
-    const poll=setInterval(()=>{const r=loadRoom(roomId);if(r)setRoom(r);},800);
-    return()=>clearInterval(poll);
-  },[roomId]);
+  // ── REALTIME SUBSCRIPTION ────────────────────────────────
+  useEffect(() => {
+    if (!roomId) return;
 
-  const mutateRoom=useCallback((updater)=>{
-    setRoom(prev=>{const next=updater(prev||{});saveRoom(roomId,next);return next;});
-  },[roomId]);
+    // Subscribe to changes on this room row
+    const channel = supabase
+      .channel(`room-${roomId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "rooms",
+        filter: `id=eq.${roomId}`,
+      }, (payload) => {
+        if (payload.new?.data) setRoom(payload.new.data);
+      })
+      .subscribe();
 
-  const effectiveSquad=myRole==="PO"?null:myRole;
+    return () => { supabase.removeChannel(channel); };
+  }, [roomId]);
 
-  function createRoom(){
-    if(!myName.trim()||!myRole)return;
-    const id=genId();
-    const initial={id,story:"",revealed:false,agreedPoints:null,
-      players:{[myId]:{name:myName.trim(),role:myRole,squad:effectiveSquad,vote:null,joinedAt:Date.now()}},
-      history:[]};
-    saveRoom(id,initial);setRoomId(id);setRoom(initial);setScreen("game");
+  // ── MUTATE ROOM (read-modify-write to Supabase) ──────────
+  const mutateRoom = useCallback(async (updater) => {
+    const current = await fetchRoom(roomId);
+    const next = updater(current || {});
+    setRoom(next); // optimistic update
+    await upsertRoom(roomId, next);
+  }, [roomId]);
+
+  // ── CREATE ROOM ──────────────────────────────────────────
+  async function createRoom() {
+    if (!myName.trim() || !myRole) return;
+    setLoading(true); setError("");
+    const id = genId();
+    const effectiveSquad = myRole === "PO" ? null : myRole;
+    const initial = {
+      id, story: "", revealed: false, agreedPoints: null,
+      players: { [myId]: { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() } },
+      history: [],
+    };
+    try {
+      await upsertRoom(id, initial);
+      setRoomId(id); setRoom(initial); setScreen("game");
+    } catch (e) {
+      setError("Could not create room. Check your Supabase connection.");
+    }
+    setLoading(false);
   }
 
-  function joinRoom(){
-    if(!myName.trim()||!myRole||!roomInput.trim())return;
-    const id=roomInput.trim().toUpperCase();
-    let r=loadRoom(id);
-    if(!r)r={id,story:"",revealed:false,agreedPoints:null,players:{},history:[]};
-    r.players[myId]={name:myName.trim(),role:myRole,squad:effectiveSquad,vote:null,joinedAt:Date.now()};
-    saveRoom(id,r);setRoomId(id);setRoom(r);setScreen("game");
+  // ── JOIN ROOM ────────────────────────────────────────────
+  async function joinRoom() {
+    if (!myName.trim() || !myRole || !roomInput.trim()) return;
+    setLoading(true); setError("");
+    const id = roomInput.trim().toUpperCase();
+    const effectiveSquad = myRole === "PO" ? null : myRole;
+    try {
+      let r = await fetchRoom(id);
+      if (!r) r = { id, story: "", revealed: false, agreedPoints: null, players: {}, history: [] };
+      r.players[myId] = { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
+      await upsertRoom(id, r);
+      setRoomId(id); setRoom(r); setScreen("game");
+    } catch (e) {
+      setError("Could not join room. Check the room code and try again.");
+    }
+    setLoading(false);
   }
 
-  function castVote(val){
-    if(room?.revealed||myRole==="PO")return;
-    mutateRoom(r=>({...r,players:{...r.players,[myId]:{...r.players[myId],vote:val}}}));
+  async function castVote(val) {
+    if (room?.revealed || myRole === "PO") return;
+    await mutateRoom(r => ({
+      ...r,
+      players: { ...r.players, [myId]: { ...r.players[myId], vote: val } },
+    }));
   }
 
-  function revealVotes(){mutateRoom(r=>({...r,revealed:true}));}
-
-  function setAgreedPoints(val){
-    mutateRoom(r=>({...r,agreedPoints:r.agreedPoints===val?null:val}));
+  async function revealVotes() {
+    await mutateRoom(r => ({ ...r, revealed: true }));
   }
 
-  function newRound(){
-    mutateRoom(r=>{
-      const numericVotes=Object.values(r.players).map(p=>parseFloat(p.vote)).filter(v=>!isNaN(v));
-      const squads={};
-      SQUADS.forEach(sq=>{const s=squadStats(r.players,sq,true);if(s&&s.count>0)squads[sq]=s;});
-      const history=r.revealed&&r.story
-        ?[{story:r.story,agreedPoints:r.agreedPoints,avg:avg(numericVotes),squads,ts:Date.now()},...(r.history||[])].slice(0,10)
-        :(r.history||[]);
-      const players={};
-      for(const[pid,p]of Object.entries(r.players))players[pid]={...p,vote:null};
-      return{...r,story:"",revealed:false,agreedPoints:null,players,history};
+  async function setAgreedPoints(val) {
+    await mutateRoom(r => ({ ...r, agreedPoints: r.agreedPoints === val ? null : val }));
+  }
+
+  async function newRound() {
+    await mutateRoom(r => {
+      const numericVotes = Object.values(r.players).map(p => parseFloat(p.vote)).filter(v => !isNaN(v));
+      const squads = {};
+      SQUADS.forEach(sq => { const s = squadStats(r.players, sq, true); if (s && s.count > 0) squads[sq] = s; });
+      const history = r.revealed && r.story
+        ? [{ story: r.story, agreedPoints: r.agreedPoints, avg: avg(numericVotes), squads, ts: Date.now() }, ...(r.history || [])].slice(0, 10)
+        : (r.history || []);
+      const players = {};
+      for (const [pid, p] of Object.entries(r.players)) players[pid] = { ...p, vote: null };
+      return { ...r, story: "", revealed: false, agreedPoints: null, players, history };
     });
     setStoryInput("");
   }
 
-  function setStory(){mutateRoom(r=>({...r,story:storyInput.trim()}));setEditingStory(false);}
-  function leaveRoom(){mutateRoom(r=>{const p={...r.players};delete p[myId];return{...r,players:p};});setRoomId(null);setRoom(null);setScreen("home");}
-  function copyRoomId(){navigator.clipboard.writeText(roomId).catch(()=>{});setCopied(true);setTimeout(()=>setCopied(false),1500);}
+  async function setStory() {
+    await mutateRoom(r => ({ ...r, story: storyInput.trim() }));
+    setEditingStory(false);
+  }
 
-  const players=room?.players||{};
-  const me=players[myId];
-  const myVote=me?.vote??null;
-  const revealed=room?.revealed||false;
-  const squadPlayers=Object.entries(players).filter(([,p])=>p.squad===activeSquad);
-  const anyVoted=Object.values(players).some(p=>p.vote!==null);
-  const activeStats=squadStats(players,activeSquad,revealed);
-  const voteCounts=revealed?Object.values(players).filter(p=>p.squad===activeSquad).reduce((acc,p)=>{if(p.vote!==null)acc[p.vote]=(acc[p.vote]||0)+1;return acc;},{}):{};
-  const squadComplete=sq=>revealed&&Object.values(players).some(p=>p.squad===sq&&p.vote!==null);
-  const isPO=myRole==="PO";
-  const isMySquadTab=effectiveSquad===activeSquad;
+  async function leaveRoom() {
+    await mutateRoom(r => {
+      const players = { ...r.players };
+      delete players[myId];
+      return { ...r, players };
+    });
+    setRoomId(null); setRoom(null); setScreen("home");
+  }
 
-  return(
+  function copyRoomId() {
+    navigator.clipboard.writeText(roomId).catch(() => {});
+    setCopied(true); setTimeout(() => setCopied(false), 1500);
+  }
+
+  // ── COMPUTED ─────────────────────────────────────────────
+  const players = room?.players || {};
+  const me = players[myId];
+  const myVote = me?.vote ?? null;
+  const revealed = room?.revealed || false;
+  const effectiveSquad = myRole === "PO" ? null : myRole;
+  const squadPlayers = Object.entries(players).filter(([, p]) => p.squad === activeSquad);
+  const anyVoted = Object.values(players).some(p => p.vote !== null);
+  const activeStats = squadStats(players, activeSquad, revealed);
+  const voteCounts = revealed
+    ? Object.values(players).filter(p => p.squad === activeSquad)
+        .reduce((acc, p) => { if (p.vote !== null) acc[p.vote] = (acc[p.vote] || 0) + 1; return acc; }, {})
+    : {};
+  const squadComplete = sq => revealed && Object.values(players).some(p => p.squad === sq && p.vote !== null);
+  const isPO = myRole === "PO";
+  const isMySquadTab = effectiveSquad === activeSquad;
+
+  return (
     <>
       <style>{css}</style>
       <div className="app">
@@ -373,7 +474,7 @@ export default function PlanningPoker(){
             <div className="nav-title">Planit <span>Poker</span></div>
           </div>
           <div className="nav-right">
-            {screen==="game"&&me&&(
+            {screen === "game" && me && (
               <>
                 <span className="nav-badge">{me.name} · {me.role}</span>
                 <button className="btn btn-danger" onClick={leaveRoom}>Leave</button>
@@ -383,7 +484,9 @@ export default function PlanningPoker(){
         </nav>
 
         <div className="main">
-          {screen==="home"&&(
+
+          {/* ── HOME ── */}
+          {screen === "home" && (
             <div className="setup-container slide-up">
               <div className="setup-hero">
                 <h1>Estimate with <em>confidence</em></h1>
@@ -395,203 +498,200 @@ export default function PlanningPoker(){
                   <p>Create a new room or join an existing one</p>
                 </div>
                 <div className="sc-body">
+                  {error && <div className="error-box">{error}</div>}
                   <div className="field">
                     <div className="label">Your Name</div>
-                    <input value={myName} onChange={e=>setMyName(e.target.value)} placeholder="e.g. Sarah Chen"/>
+                    <input value={myName} onChange={e => setMyName(e.target.value)} placeholder="e.g. Sarah Chen" />
                   </div>
                   <div className="field">
                     <div className="label">Your Role</div>
                     <div className="role-grid">
-                      {ROLES.map(r=>(
-                        <div key={r} className={`role-pill ${r==="PO"?"po":""} ${myRole===r?"selected":""}`}
-                          onClick={()=>setMyRole(r)}>{r}</div>
+                      {ROLES.map(r => (
+                        <div key={r} className={`role-pill ${r === "PO" ? "po" : ""} ${myRole === r ? "selected" : ""}`}
+                          onClick={() => setMyRole(r)}>{r}</div>
                       ))}
                     </div>
                   </div>
-                  {myRole&&myRole!=="PO"&&(
-                    <div className="fade-in" style={{fontSize:"0.78rem",color:SC.slate,background:SC.offWhite,padding:"10px 14px",borderRadius:8,border:`1px solid ${SC.silver}`}}>
-                      You will vote in the <strong style={{color:SC.teal}}>{myRole}</strong> squad.
+                  {myRole && myRole !== "PO" && (
+                    <div className="fade-in" style={{ fontSize: "0.78rem", color: SC.slate, background: SC.offWhite, padding: "10px 14px", borderRadius: 8, border: `1px solid ${SC.silver}` }}>
+                      You will vote in the <strong style={{ color: SC.teal }}>{myRole}</strong> squad.
                     </div>
                   )}
-                  {myRole==="PO"&&(
-                    <div className="fade-in" style={{fontSize:"0.78rem",color:SC.slate,background:SC.offWhite,padding:"10px 14px",borderRadius:8,border:`1px solid ${SC.silver}`}}>
+                  {myRole === "PO" && (
+                    <div className="fade-in" style={{ fontSize: "0.78rem", color: SC.slate, background: SC.offWhite, padding: "10px 14px", borderRadius: 8, border: `1px solid ${SC.silver}` }}>
                       As PO, you observe all squads and set the final agreed story points.
                     </div>
                   )}
-                  <button className="btn btn-primary" style={{width:"100%"}} onClick={createRoom} disabled={!myName.trim()||!myRole}>
-                    Create New Room
+                  <button className="btn btn-primary" style={{ width: "100%" }} onClick={createRoom}
+                    disabled={!myName.trim() || !myRole || loading}>
+                    {loading ? "Creating…" : "Create New Room"}
                   </button>
                   <div className="divider">or join existing</div>
                   <div className="field">
                     <div className="label">Room Code</div>
-                    <input value={roomInput} onChange={e=>setRoomInput(e.target.value.toUpperCase())} placeholder="e.g. A1B2C3" maxLength={12} onKeyDown={e=>e.key==="Enter"&&joinRoom()}/>
+                    <input value={roomInput} onChange={e => setRoomInput(e.target.value.toUpperCase())}
+                      placeholder="e.g. A1B2C3" maxLength={12}
+                      onKeyDown={e => e.key === "Enter" && joinRoom()} />
                   </div>
-                  <button className="btn btn-outline" style={{width:"100%"}} onClick={joinRoom} disabled={!myName.trim()||!myRole||!roomInput.trim()}>
-                    Join Room →
+                  <button className="btn btn-outline" style={{ width: "100%" }} onClick={joinRoom}
+                    disabled={!myName.trim() || !myRole || !roomInput.trim() || loading}>
+                    {loading ? "Joining…" : "Join Room →"}
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {screen==="game"&&room&&(
+          {/* ── GAME ── */}
+          {screen === "game" && room && (
             <>
               <div className="room-bar slide-up">
                 <div className="room-info">
                   <div className="room-code">
                     <div><div className="lbl">Room</div><div className="val">{roomId}</div></div>
-                    <button className="copy-btn" onClick={copyRoomId}>{copied?"✓ Copied":"Copy"}</button>
+                    <button className="copy-btn" onClick={copyRoomId}>{copied ? "✓ Copied" : "Copy"}</button>
                   </div>
                   <div className="me-badge">
                     <span>{me?.name}</span>
                     <span className={`role-tag ${myRole}`}>{myRole}</span>
-                    <span style={{color:SC.steel,fontSize:"0.75rem"}}>{Object.keys(players).length} in room</span>
+                    <span style={{ color: SC.steel, fontSize: "0.75rem" }}>{Object.keys(players).length} in room</span>
                   </div>
                 </div>
-                {revealed&&(
-                  <button className="btn btn-snap" onClick={()=>setShowSnapshot(true)}>📸 Snapshot</button>
+                {revealed && (
+                  <button className="btn btn-snap" onClick={() => setShowSnapshot(true)}>📸 Snapshot</button>
                 )}
               </div>
 
-              {/* Story */}
               <div className="story-panel slide-up">
                 <div className="story-hdr">
                   <div className="story-hdr-title">Current Story</div>
-                  {room.story&&!editingStory&&(
-                    <button className="btn btn-ghost" style={{color:"rgba(255,255,255,0.6)",fontSize:"0.72rem"}}
-                      onClick={()=>{setStoryInput(room.story);setEditingStory(true);}}>Edit</button>
+                  {room.story && !editingStory && (
+                    <button className="btn btn-ghost" style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.72rem" }}
+                      onClick={() => { setStoryInput(room.story); setEditingStory(true); }}>Edit</button>
                   )}
                 </div>
                 <div className="story-body">
-                  {editingStory||!room.story?(
-                    <div style={{display:"flex",gap:10}}>
-                      <input value={storyInput} onChange={e=>setStoryInput(e.target.value)}
+                  {editingStory || !room.story ? (
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <input value={storyInput} onChange={e => setStoryInput(e.target.value)}
                         placeholder="Enter the story or feature title…" autoFocus
-                        onKeyDown={e=>{if(e.key==="Enter")setStory();if(e.key==="Escape")setEditingStory(false);}}/>
+                        onKeyDown={e => { if (e.key === "Enter") setStory(); if (e.key === "Escape") setEditingStory(false); }} />
                       <button className="btn btn-primary" onClick={setStory} disabled={!storyInput.trim()}>Set</button>
-                      {room.story&&<button className="btn btn-outline" onClick={()=>setEditingStory(false)}>✕</button>}
+                      {room.story && <button className="btn btn-outline" onClick={() => setEditingStory(false)}>✕</button>}
                     </div>
-                  ):(
+                  ) : (
                     <div className="story-text">{room.story}</div>
                   )}
                 </div>
               </div>
 
-              {/* Squad Tabs */}
               <div className="squad-tabs slide-up">
-                {SQUADS.map(sq=>(
-                  <button key={sq} className={`squad-tab ${activeSquad===sq?"active":""} ${squadComplete(sq)?"complete":""}`}
-                    onClick={()=>setActiveSquad(sq)}>
-                    {sq}
-                    {squadComplete(sq)&&<span className="tab-check">✓</span>}
-                    <span style={{fontSize:"0.65rem",marginLeft:4,opacity:0.6}}>
-                      ({Object.values(players).filter(p=>p.squad===sq).length})
+                {SQUADS.map(sq => (
+                  <button key={sq} className={`squad-tab ${activeSquad === sq ? "active" : ""} ${squadComplete(sq) ? "complete" : ""}`}
+                    onClick={() => setActiveSquad(sq)}>
+                    {sq}{squadComplete(sq) && <span className="tab-check">✓</span>}
+                    <span style={{ fontSize: "0.65rem", marginLeft: 4, opacity: 0.6 }}>
+                      ({Object.values(players).filter(p => p.squad === sq).length})
                     </span>
                   </button>
                 ))}
               </div>
 
-              {/* Players */}
               <div className="slide-up">
                 <div className="section-label">{activeSquad} Participants</div>
-                {squadPlayers.length===0?(
-                  <div style={{color:SC.steel,fontSize:"0.82rem",padding:"12px 0"}}>No one from {activeSquad} has joined yet.</div>
-                ):(
+                {squadPlayers.length === 0 ? (
+                  <div style={{ color: SC.steel, fontSize: "0.82rem", padding: "12px 0" }}>No one from {activeSquad} has joined yet.</div>
+                ) : (
                   <div className="players-grid">
-                    {squadPlayers.map(([pid,p])=>(
-                      <div key={pid} className={`player-tile ${p.vote&&!revealed?"voted":""} ${p.vote&&revealed?"revealed-tile":""} ${pid===myId?"me-tile":""}`}>
-                        <div className="player-name">{p.name}{pid===myId?" ★":""}</div>
+                    {squadPlayers.map(([pid, p]) => (
+                      <div key={pid} className={`player-tile ${p.vote && !revealed ? "voted" : ""} ${p.vote && revealed ? "revealed-tile" : ""} ${pid === myId ? "me-tile" : ""}`}>
+                        <div className="player-name">{p.name}{pid === myId ? " ★" : ""}</div>
                         <span className={`p-role-tag ${p.role}`}>{p.role}</span>
-                        <div className={`card-slot ${p.vote===null?"empty":revealed?"revealed-val":"voted-hidden"}`}>
-                          {revealed&&p.vote!==null?p.vote:p.vote===null?"":""}
+                        <div className={`card-slot ${p.vote === null ? "empty" : revealed ? "revealed-val" : "voted-hidden"}`}>
+                          {revealed && p.vote !== null ? p.vote : ""}
                         </div>
-                        {p.vote!==null&&!revealed&&<span className="status-badge badge-voted-s"><span className="badge-dot"/>voted</span>}
-                        {p.vote===null&&<span className="status-badge badge-waiting pulse"><span className="badge-dot"/>waiting</span>}
+                        {p.vote !== null && !revealed && <span className="status-badge badge-voted-s"><span className="badge-dot" />voted</span>}
+                        {p.vote === null && <span className="status-badge badge-waiting pulse"><span className="badge-dot" />waiting</span>}
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* Results */}
-              {revealed&&activeStats&&activeStats.count>0&&(
+              {revealed && activeStats && activeStats.count > 0 && (
                 <div className="results-banner slide-up">
                   <div className="result-stat"><div className="result-val">{activeStats.avg}</div><div className="result-lbl">Average</div></div>
                   <div className="result-stat"><div className="result-val">{activeStats.median}</div><div className="result-lbl">Median</div></div>
                   <div className="vote-chips">
-                    {Object.entries(voteCounts).sort((a,b)=>b[1]-a[1]).map(([v,c])=>(
+                    {Object.entries(voteCounts).sort((a, b) => b[1] - a[1]).map(([v, c]) => (
                       <div key={v} className="vote-chip">{v} <span className="cnt">×{c}</span></div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Agreed Points */}
-              {revealed&&(
+              {revealed && (
                 <div className="agreed-section slide-up">
                   <div className="agreed-label">Agreed Points</div>
                   <div className="agreed-chips">
-                    {FIBONACCI.filter(v=>v!=="?").map(v=>(
-                      <div key={v} className={`agreed-chip ${room.agreedPoints===v?"selected":""}`}
-                        onClick={()=>setAgreedPoints(v)}>{v}</div>
+                    {FIBONACCI.filter(v => v !== "?").map(v => (
+                      <div key={v} className={`agreed-chip ${room.agreedPoints === v ? "selected" : ""}`}
+                        onClick={() => setAgreedPoints(v)}>{v}</div>
                     ))}
                   </div>
-                  {room.agreedPoints&&(
-                    <span style={{fontSize:"0.78rem",color:SC.teal,fontWeight:600}}>✓ {room.agreedPoints} pts agreed</span>
+                  {room.agreedPoints && (
+                    <span style={{ fontSize: "0.78rem", color: SC.teal, fontWeight: 600 }}>✓ {room.agreedPoints} pts agreed</span>
                   )}
                 </div>
               )}
 
-              {/* Controls */}
               <div className="controls-row slide-up">
-                {!revealed?(
+                {!revealed ? (
                   <button className="btn btn-blue" onClick={revealVotes} disabled={!anyVoted}>
-                    {anyVoted?"Reveal All Votes →":"Waiting for votes…"}
+                    {anyVoted ? "Reveal All Votes →" : "Waiting for votes…"}
                   </button>
-                ):(
+                ) : (
                   <button className="btn btn-blue" onClick={newRound}>Start New Round →</button>
                 )}
-                {revealed&&(
-                  <button className="btn btn-snap" onClick={()=>setShowSnapshot(true)}>📸 Take Snapshot</button>
+                {revealed && (
+                  <button className="btn btn-snap" onClick={() => setShowSnapshot(true)}>📸 Take Snapshot</button>
                 )}
               </div>
 
-              {/* Voting cards */}
-              {!revealed&&!isPO&&isMySquadTab&&(
+              {!revealed && !isPO && isMySquadTab && (
                 <div className="voting-panel slide-up">
                   <div className="voting-hdr">
                     <div className="voting-title">Cast Your Vote — {activeSquad}</div>
-                    {myVote&&<div className="your-vote">Selected: {myVote}</div>}
+                    {myVote && <div className="your-vote">Selected: {myVote}</div>}
                   </div>
                   <div className="cards-row">
-                    {FIBONACCI.map(val=>(
-                      <div key={val} className={`vote-card ${myVote===val?"selected":""}`} onClick={()=>castVote(val)}>{val}</div>
+                    {FIBONACCI.map(val => (
+                      <div key={val} className={`vote-card ${myVote === val ? "selected" : ""}`} onClick={() => castVote(val)}>{val}</div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {!revealed&&isPO&&(
+              {!revealed && isPO && (
                 <div className="po-observer">👁 As PO, you're observing all squads. Votes are hidden until revealed.</div>
               )}
 
-              {!revealed&&!isPO&&!isMySquadTab&&(
+              {!revealed && !isPO && !isMySquadTab && (
                 <div className="po-observer">Switch to the <strong>{effectiveSquad}</strong> tab to cast your vote.</div>
               )}
 
-              {/* History */}
-              {(room.history||[]).length>0&&(
+              {(room.history || []).length > 0 && (
                 <div className="history-panel slide-up">
                   <div className="panel-header"><div className="panel-title">Round History</div></div>
-                  {room.history.map((h,i)=>(
+                  {room.history.map((h, i) => (
                     <div key={i} className="history-row">
-                      <div className="h-story">{h.story||"(untitled)"}</div>
+                      <div className="h-story">{h.story || "(untitled)"}</div>
                       <div className="h-squad-tags">
-                        {Object.keys(h.squads||{}).map(sq=>(
+                        {Object.keys(h.squads || {}).map(sq => (
                           <span key={sq} className={`h-sq ${sq}`}>{sq}: {h.squads[sq].avg}</span>
                         ))}
                       </div>
-                      <div className="h-agreed">{h.agreedPoints??"—"}</div>
+                      <div className="h-agreed">{h.agreedPoints ?? "—"}</div>
                     </div>
                   ))}
                 </div>
@@ -601,9 +701,7 @@ export default function PlanningPoker(){
         </div>
       </div>
 
-      {showSnapshot&&room&&(
-        <SnapshotModal room={room} onClose={()=>setShowSnapshot(false)}/>
-      )}
+      {showSnapshot && room && <SnapshotModal room={room} onClose={() => setShowSnapshot(false)} />}
     </>
   );
 }
