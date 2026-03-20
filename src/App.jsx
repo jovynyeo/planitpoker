@@ -6,10 +6,10 @@ const SQUADS = ["RTIM", "QA", "ACM"];
 const ROLES = ["PO", "RTIM", "QA", "ACM"];
 
 const ROLE_COLORS = {
-  PO:   { bg: "#003087", bgLight: "rgba(0,48,135,0.08)", bgGlow: "rgba(0,48,135,0.15)", border: "#003087", text: "#003087", gradient: "linear-gradient(135deg,#003087,#004DB3)" },
-  RTIM: { bg: "#00847F", bgLight: "rgba(0,132,127,0.08)", bgGlow: "rgba(0,132,127,0.15)", border: "#00847F", text: "#00847F", gradient: "linear-gradient(135deg,#00847F,#005F5B)" },
-  QA:   { bg: "#1565C0", bgLight: "rgba(21,101,192,0.08)", bgGlow: "rgba(21,101,192,0.15)", border: "#1565C0", text: "#1565C0", gradient: "linear-gradient(135deg,#1565C0,#003087)" },
-  ACM:  { bg: "#c47f00", bgLight: "rgba(240,165,0,0.08)", bgGlow: "rgba(240,165,0,0.15)", border: "#c47f00", text: "#c47f00", gradient: "linear-gradient(135deg,#c47f00,#f0a500)" },
+  PO:   { bg: "#003087", bgLight: "rgba(0,48,135,0.08)", bgGlow: "rgba(0,48,135,0.15)", border: "#003087", text: "#003087", gradient: "linear-gradient(135deg,#003087,#004DB3)", squadGradient: "linear-gradient(135deg,#003087,#004DB3)" },
+  RTIM: { bg: "#00847F", bgLight: "rgba(0,132,127,0.08)", bgGlow: "rgba(0,132,127,0.15)", border: "#00847F", text: "#00847F", gradient: "linear-gradient(135deg,#00847F,#005F5B)", squadGradient: "linear-gradient(135deg,#00847F,#005F5B)" },
+  QA:   { bg: "#1565C0", bgLight: "rgba(21,101,192,0.08)", bgGlow: "rgba(21,101,192,0.15)", border: "#1565C0", text: "#1565C0", gradient: "linear-gradient(135deg,#1565C0,#003087)", squadGradient: "linear-gradient(135deg,#1565C0,#003087)" },
+  ACM:  { bg: "#c47f00", bgLight: "rgba(240,165,0,0.08)", bgGlow: "rgba(240,165,0,0.15)", border: "#c47f00", text: "#c47f00", gradient: "linear-gradient(135deg,#c47f00,#f0a500)", squadGradient: "linear-gradient(135deg,#c47f00,#f0a500)" },
 };
 
 const SC = {
@@ -111,9 +111,9 @@ input::placeholder{color:${SC.steel};}
 .p-role-tag.ACM{background:rgba(240,165,0,0.12);color:#c47f00;}
 .card-slot{width:52px;height:74px;border-radius:7px;border:1.5px solid ${SC.silver};display:flex;align-items:center;justify-content:center;font-family:'DM Serif Display',serif;font-size:1.3rem;transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);position:relative;}
 .card-slot.empty{background:${SC.offWhite};color:${SC.steel};}
-.card-slot.voted-hidden{background:linear-gradient(135deg,${SC.teal},${SC.tealDark});border-color:${SC.teal};}
+.card-slot.voted-hidden{background:var(--squad-gradient,linear-gradient(135deg,${SC.teal},${SC.tealDark}));border-color:var(--squad-color,${SC.teal});}
 .card-slot.voted-hidden::after{content:'●●●';color:rgba(255,255,255,0.4);font-size:0.45rem;letter-spacing:3px;}
-.card-slot.revealed-val{background:linear-gradient(135deg,${SC.greenLight},#c8ece9);border-color:${SC.teal};color:${SC.tealDark};transform:scale(1.06);box-shadow:0 4px 16px rgba(0,132,127,0.2);font-size:1.4rem;}
+.card-slot.revealed-val{background:var(--squad-bg,linear-gradient(135deg,${SC.greenLight},#c8ece9));border-color:var(--squad-color,${SC.teal});color:var(--squad-color,${SC.tealDark});transform:scale(1.06);box-shadow:0 4px 16px var(--squad-glow,rgba(0,132,127,0.2));font-size:1.4rem;}
 .voting-panel{background:${SC.white};border:1px solid ${SC.silver};border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,48,135,0.04);}
 .voting-hdr{background:var(--role-gradient,linear-gradient(135deg,${SC.teal},${SC.tealDark}));padding:14px 20px;display:flex;align-items:center;justify-content:space-between;}
 .voting-title{font-size:0.7rem;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.1em;font-weight:600;}
@@ -193,6 +193,11 @@ input::placeholder{color:${SC.steel};}
 .po-observer{background:${SC.offWhite};border:1px solid ${SC.silver};border-radius:10px;padding:14px 20px;color:${SC.slate};font-size:0.82rem;}
 .creator-tag{background:rgba(240,165,0,0.15);color:#c47f00;border:1px solid rgba(240,165,0,0.3);border-radius:20px;padding:3px 10px;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;}
 .new-creator-toast{background:linear-gradient(135deg,rgba(240,165,0,0.12),rgba(240,165,0,0.06));border:1px solid rgba(240,165,0,0.35);border-radius:10px;padding:14px 20px;color:#c47f00;font-size:0.85rem;font-weight:500;}
+.creator-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);}
+.creator-modal{background:white;border-radius:16px;padding:32px 28px;max-width:380px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.25);display:flex;flex-direction:column;gap:14px;}
+.creator-modal-icon{font-size:2.5rem;line-height:1;}
+.creator-modal-title{font-family:'DM Serif Display',serif;font-size:1.3rem;color:#003087;}
+.creator-modal-body{font-size:0.85rem;color:#6B7A8D;line-height:1.6;}
 .countdown-badge{display:inline-flex;align-items:center;padding:8px 18px;border-radius:8px;background:${SC.blue};color:white;font-family:'DM Serif Display',serif;font-size:1.3rem;font-weight:700;letter-spacing:0.02em;box-shadow:0 2px 8px rgba(0,48,135,0.25);transition:background 0.3s;}
 .countdown-badge.urgent{background:${SC.red};box-shadow:0 2px 12px rgba(192,57,43,0.4);animation:urgentPulse 0.5s infinite alternate;}
 @keyframes urgentPulse{from{transform:scale(1);}to{transform:scale(1.04);}}
@@ -421,10 +426,13 @@ export default function PlanningPoker() {
     setLoading(true); setError("");
     const id = genId();
     const effectiveSquad = myRole === "PO" ? null : myRole;
+    const creatorKey = `${myName.trim().toLowerCase()}:${myRole}`;
     const initial = {
       id, story: "", revealed: false, votingStarted: false,
       agreedPoints: null, squadAgreedPoints: {},
       creatorId: myId,
+      originalCreatorId: myId,
+      originalCreatorKey: creatorKey,
       players: { [myId]: { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() } },
       history: [],
     };
@@ -445,8 +453,13 @@ export default function PlanningPoker() {
     const effectiveSquad = myRole === "PO" ? null : myRole;
     try {
       let r = await fetchRoom(id);
-      if (!r) r = { id, story: "", revealed: false, votingStarted: false, agreedPoints: null, squadAgreedPoints: {}, creatorId: null, players: {}, history: [] };
+      if (!r) r = { id, story: "", revealed: false, votingStarted: false, agreedPoints: null, squadAgreedPoints: {}, creatorId: null, originalCreatorKey: null, players: {}, history: [] };
       r.players[myId] = { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
+      // Reclaim creator if this user matches the original creator fingerprint
+      const joiningKey = `${myName.trim().toLowerCase()}:${myRole}`;
+      if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) {
+        r.creatorId = myId;
+      }
       await upsertRoom(id, r);
       setActiveSquad(effectiveSquad || "RTIM"); setRoomId(id); setRoom(r); setScreen("game");
     } catch (e) {
@@ -548,8 +561,7 @@ export default function PlanningPoker() {
     const currId = room.creatorId;
     // If it just changed TO me and wasn't me before
     if (currId === myId && prevId !== null && prevId !== myId) {
-      setIsNewCreator(true);
-      setTimeout(() => setIsNewCreator(false), 5000);
+      setIsNewCreator(true); // dismissed by user clicking button
     }
     prevCreatorIdRef.current = currId;
   }, [room?.creatorId]);
@@ -718,10 +730,19 @@ export default function PlanningPoker() {
                 )}
               </div>
 
-              {/* New creator toast */}
+              {/* New creator modal */}
               {isNewCreator && (
-                <div className="new-creator-toast slide-up">
-                  👑 You are now the session creator — you can start voting and reveal votes.
+                <div className="creator-modal-overlay fade-in">
+                  <div className="creator-modal slide-up">
+                    <div className="creator-modal-icon">👑</div>
+                    <div className="creator-modal-title">You're now the Session Creator</div>
+                    <div className="creator-modal-body">
+                      The previous creator has left the room. You now have full control — you can set the story, start voting, and reveal votes.
+                    </div>
+                    <button className="btn btn-primary" style={{width:"100%"}} onClick={() => setIsNewCreator(false)}>
+                      Got it, let's go →
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -773,6 +794,8 @@ export default function PlanningPoker() {
                         style={{
                           "--squad-color": ROLE_COLORS[p.squad]?.bg || "#00847F",
                           "--squad-bg": ROLE_COLORS[p.squad]?.bgLight || "rgba(0,132,127,0.08)",
+                          "--squad-gradient": ROLE_COLORS[p.squad]?.squadGradient || "linear-gradient(135deg,#00847F,#005F5B)",
+                          "--squad-glow": ROLE_COLORS[p.squad]?.bgGlow || "rgba(0,132,127,0.15)",
                           "--squad-color-alpha": (ROLE_COLORS[p.squad]?.bg || "#00847F") + "40",
                         }}
                         className={`player-tile ${p.vote && !revealed ? "voted" : ""} ${p.vote && revealed ? "revealed-tile" : ""} ${pid === myId ? "me-tile" : ""}`}>
