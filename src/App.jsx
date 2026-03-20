@@ -218,6 +218,9 @@ input::placeholder{color:${SC.steel};}
 .agreed-confirmed{font-size:0.78rem;color:${SC.teal};font-weight:600;white-space:nowrap;}
 .agreed-chip.readonly{cursor:default;opacity:0.5;}
 .agreed-chip.readonly:hover{border-color:${SC.silver};color:${SC.ink};background:${SC.offWhite};transform:none;}
+.btn-share{background:linear-gradient(135deg,${SC.blue},${SC.blueMid});color:white;font-size:0.75rem;padding:7px 14px;border-radius:6px;box-shadow:0 2px 8px rgba(0,48,135,0.2);}
+.btn-share:hover{opacity:0.9;transform:translateY(-1px);}
+.prefilled-banner{background:linear-gradient(135deg,rgba(0,48,135,0.06),rgba(0,48,135,0.02));border:1px solid rgba(0,48,135,0.2);border-radius:8px;padding:12px 16px;font-size:0.82rem;color:${SC.blue};line-height:1.5;}
 .countdown-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}
 .countdown-bar-wrap{width:100%;max-width:300px;height:6px;background:${SC.silver};border-radius:3px;overflow:hidden;}
 .countdown-bar{height:100%;border-radius:3px;transition:width 0.5s linear,background 0.3s;}
@@ -374,8 +377,16 @@ export default function PlanningPoker() {
   const [activeSquad, setActiveSquad] = useState(null); // set on join
   const [showSnapshot, setShowSnapshot] = useState(false);
   const [isNewCreator, setIsNewCreator] = useState(false);
+  const [originalCreatorReclaimed, setOriginalCreatorReclaimed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // ── READ ROOM CODE FROM URL PARAM ───────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roomParam = params.get("room");
+    if (roomParam) setRoomInput(roomParam.toUpperCase());
+  }, []);
 
   // ── REALTIME SUBSCRIPTION ────────────────────────────────
   useEffect(() => {
@@ -559,9 +570,13 @@ export default function PlanningPoker() {
     if (!room || !roomId) return;
     const prevId = prevCreatorIdRef.current;
     const currId = room.creatorId;
-    // If it just changed TO me and wasn't me before
+    // Handed off TO me
     if (currId === myId && prevId !== null && prevId !== myId) {
-      setIsNewCreator(true); // dismissed by user clicking button
+      setIsNewCreator(true);
+    }
+    // Taken AWAY from me (original creator reclaimed)
+    if (prevId === myId && currId !== null && currId !== myId) {
+      setOriginalCreatorReclaimed(true);
     }
     prevCreatorIdRef.current = currId;
   }, [room?.creatorId]);
@@ -580,9 +595,17 @@ export default function PlanningPoker() {
     return () => window.removeEventListener("beforeunload", handleUnload);
   }, [roomId, myId]);
 
+  const [copiedUrl, setCopiedUrl] = useState(false);
+
   function copyRoomId() {
     navigator.clipboard.writeText(roomId).catch(() => {});
     setCopied(true); setTimeout(() => setCopied(false), 1500);
+  }
+
+  function shareUrl() {
+    const url = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+    navigator.clipboard.writeText(url).catch(() => {});
+    setCopiedUrl(true); setTimeout(() => setCopiedUrl(false), 2000);
   }
 
   // ── COMPUTED ─────────────────────────────────────────────
@@ -652,9 +675,14 @@ export default function PlanningPoker() {
                 </div>
                 <div className="sc-body">
                   {error && <div className="error-box">{error}</div>}
+                  {roomInput && (
+                    <div className="prefilled-banner fade-in">
+                      🎉 You've been invited to room <strong>{roomInput}</strong> — enter your name and role to jump in!
+                    </div>
+                  )}
                   <div className="field">
                     <div className="label">Your Name</div>
-                    <input value={myName} onChange={e => setMyName(e.target.value)} placeholder="e.g. Sarah Chen" />
+                    <input value={myName} onChange={e => setMyName(e.target.value)} placeholder="e.g. Sarah Chen" autoFocus />
                   </div>
                   <div className="field">
                     <div className="label">Your Role</div>
@@ -677,21 +705,43 @@ export default function PlanningPoker() {
                       As PO, you observe all squads and set the final agreed story points.
                     </div>
                   )}
-                  <button className="btn btn-primary" style={{ width: "100%" }} onClick={createRoom}
-                    disabled={!myName.trim() || !myRole || loading}>
-                    {loading ? "Creating…" : "Create New Room"}
-                  </button>
-                  <div className="divider">or join existing</div>
-                  <div className="field">
-                    <div className="label">Room Code</div>
-                    <input value={roomInput} onChange={e => setRoomInput(e.target.value.toUpperCase())}
-                      placeholder="e.g. A1B2C3" maxLength={12}
-                      onKeyDown={e => e.key === "Enter" && joinRoom()} />
-                  </div>
-                  <button className="btn btn-outline" style={{ width: "100%" }} onClick={joinRoom}
-                    disabled={!myName.trim() || !myRole || !roomInput.trim() || loading}>
-                    {loading ? "Joining…" : "Join Room →"}
-                  </button>
+                  {!roomInput ? (
+                    <>
+                      <button className="btn btn-primary" style={{ width: "100%" }} onClick={createRoom}
+                        disabled={!myName.trim() || !myRole || loading}>
+                        {loading ? "Creating…" : "Create New Room"}
+                      </button>
+                      <div className="divider">or join existing</div>
+                      <div className="field">
+                        <div className="label">Room Code</div>
+                        <input value={roomInput} onChange={e => setRoomInput(e.target.value.toUpperCase())}
+                          placeholder="e.g. A1B2C3" maxLength={12}
+                          onKeyDown={e => e.key === "Enter" && joinRoom()} />
+                      </div>
+                      <button className="btn btn-outline" style={{ width: "100%" }} onClick={joinRoom}
+                        disabled={!myName.trim() || !myRole || !roomInput.trim() || loading}>
+                        {loading ? "Joining…" : "Join Room →"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="field">
+                        <div className="label">Room Code</div>
+                        <input value={roomInput} onChange={e => setRoomInput(e.target.value.toUpperCase())}
+                          placeholder="e.g. A1B2C3" maxLength={12}
+                          onKeyDown={e => e.key === "Enter" && joinRoom()} />
+                      </div>
+                      <button className="btn btn-blue" style={{ width: "100%" }} onClick={joinRoom}
+                        disabled={!myName.trim() || !myRole || !roomInput.trim() || loading}>
+                        {loading ? "Joining…" : "→ Join Room"}
+                      </button>
+                      <div className="divider">or start fresh</div>
+                      <button className="btn btn-outline" style={{ width: "100%" }} onClick={() => { setRoomInput(""); createRoom(); }}
+                        disabled={!myName.trim() || !myRole || loading}>
+                        {loading ? "Creating…" : "Create New Room"}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -711,8 +761,11 @@ export default function PlanningPoker() {
                 <div className="room-info">
                   <div className="room-code">
                     <div><div className="lbl">Room</div><div className="val">{roomId}</div></div>
-                    <button className="copy-btn" onClick={copyRoomId}>{copied ? "✓ Copied" : "Copy"}</button>
+                    <button className="copy-btn" onClick={copyRoomId}>{copied ? "✓" : "Code"}</button>
                   </div>
+                  <button className="btn btn-share" onClick={shareUrl}>
+                    {copiedUrl ? "✓ Link copied!" : "🔗 Share invite link"}
+                  </button>
                   <div className="me-badge">
                     <span>{me?.name}</span>
                     <span className={`role-tag ${myRole}`}>{myRole}</span>
@@ -729,6 +782,22 @@ export default function PlanningPoker() {
                   <button className="btn btn-snap" onClick={() => setShowSnapshot(true)}>📸 Snapshot</button>
                 )}
               </div>
+
+              {/* Original creator reclaimed modal */}
+              {originalCreatorReclaimed && (
+                <div className="creator-modal-overlay fade-in">
+                  <div className="creator-modal slide-up">
+                    <div className="creator-modal-icon">🫡</div>
+                    <div className="creator-modal-title">The OG is back in town</div>
+                    <div className="creator-modal-body">
+                      The original session creator just rejoined and has reclaimed their throne. You've been a wonderful temp — but the crown goes back where it belongs. Carry on! 👑
+                    </div>
+                    <button className="btn btn-outline" style={{width:"100%"}} onClick={() => setOriginalCreatorReclaimed(false)}>
+                      Fair enough, carry on! 😄
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* New creator modal */}
               {isNewCreator && (
