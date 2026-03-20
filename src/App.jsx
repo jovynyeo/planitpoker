@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase";
 
-const FIBONACCI = ["?", "0", "1", "2", "3", "5", "8", "13", "21", "34", "☕"];
+const FIBONACCI = ["?", "0", "0.5", "1", "2", "3", "5", "8", "13", "20", "☕"];
 const SQUADS = ["RTIM", "QA", "ACM"];
 const ROLES = ["PO", "RTIM", "QA", "ACM"];
 
@@ -184,6 +184,11 @@ input::placeholder{color:${SC.steel};}
 .pulse{animation:pulse 2s infinite;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.5;}}
 .po-observer{background:${SC.offWhite};border:1px solid ${SC.silver};border-radius:10px;padding:14px 20px;color:${SC.slate};font-size:0.82rem;}
+.creator-tag{background:rgba(240,165,0,0.15);color:#c47f00;border:1px solid rgba(240,165,0,0.3);border-radius:20px;padding:3px 10px;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;}
+.new-creator-toast{background:linear-gradient(135deg,rgba(240,165,0,0.12),rgba(240,165,0,0.06));border:1px solid rgba(240,165,0,0.35);border-radius:10px;padding:14px 20px;color:#c47f00;font-size:0.85rem;font-weight:500;}
+.countdown-badge{display:inline-flex;align-items:center;padding:8px 18px;border-radius:8px;background:${SC.blue};color:white;font-family:'DM Serif Display',serif;font-size:1.3rem;font-weight:700;letter-spacing:0.02em;box-shadow:0 2px 8px rgba(0,48,135,0.25);transition:background 0.3s;}
+.countdown-badge.urgent{background:${SC.red};box-shadow:0 2px 12px rgba(192,57,43,0.4);animation:urgentPulse 0.5s infinite alternate;}
+@keyframes urgentPulse{from{transform:scale(1);}to{transform:scale(1.04);}}
 .pending-box{background:#fffbeb;border:1px solid rgba(240,165,0,0.3);border-radius:10px;padding:14px 20px;}
 .pending-title{font-size:0.72rem;font-weight:700;color:#c47f00;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;}
 .pending-list{display:flex;flex-wrap:wrap;gap:8px;}
@@ -353,6 +358,7 @@ export default function PlanningPoker() {
   const [editingStory, setEditingStory] = useState(false);
   const [activeSquad, setActiveSquad] = useState("RTIM");
   const [showSnapshot, setShowSnapshot] = useState(false);
+  const [isNewCreator, setIsNewCreator] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -447,9 +453,27 @@ export default function PlanningPoker() {
     }));
   }
 
+  const [countdown, setCountdown] = useState(null);
+
   async function startVoting() {
-    await mutateRoom(r => ({ ...r, votingStarted: true }));
+    await mutateRoom(r => ({ ...r, votingStarted: true, votingStartedAt: Date.now() }));
   }
+
+  // Sync countdown from room state so all users see the same timer
+  useEffect(() => {
+    if (!room?.votingStarted || !room?.votingStartedAt || room?.revealed) {
+      setCountdown(null);
+      return;
+    }
+    function tick() {
+      const elapsed = Math.floor((Date.now() - room.votingStartedAt) / 1000);
+      const remaining = Math.max(0, 15 - elapsed);
+      setCountdown(remaining);
+    }
+    tick();
+    const t = setInterval(tick, 500);
+    return () => clearInterval(t);
+  }, [room?.votingStarted, room?.votingStartedAt, room?.revealed]);
 
   async function revealVotes() {
     await mutateRoom(r => ({ ...r, revealed: true }));
@@ -484,15 +508,35 @@ export default function PlanningPoker() {
   }
 
   async function leaveRoom() {
-    // Fetch fresh state then remove self to avoid overwriting others
     const current = await fetchRoom(roomId);
     if (current) {
       const players = { ...current.players };
       delete players[myId];
-      await upsertRoom(roomId, { ...current, players });
+      let newCreatorId = current.creatorId;
+      // If leaving user is creator, hand off to earliest joiner
+      if (current.creatorId === myId) {
+        const remaining = Object.entries(players)
+          .sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0));
+        newCreatorId = remaining.length > 0 ? remaining[0][0] : null;
+      }
+      await upsertRoom(roomId, { ...current, players, creatorId: newCreatorId });
     }
     setRoomId(null); setRoom(null); setScreen("home");
   }
+
+  // Detect if creatorId just changed to me (handed off)
+  const prevCreatorIdRef = useRef(null);
+  useEffect(() => {
+    if (!room || !roomId) return;
+    const prevId = prevCreatorIdRef.current;
+    const currId = room.creatorId;
+    // If it just changed TO me and wasn't me before
+    if (currId === myId && prevId !== null && prevId !== myId) {
+      setIsNewCreator(true);
+      setTimeout(() => setIsNewCreator(false), 5000);
+    }
+    prevCreatorIdRef.current = currId;
+  }, [room?.creatorId]);
 
   // Remove player if they close/refresh the tab
   useEffect(() => {
@@ -626,13 +670,26 @@ export default function PlanningPoker() {
                   <div className="me-badge">
                     <span>{me?.name}</span>
                     <span className={`role-tag ${myRole}`}>{myRole}</span>
+                    {isCreator && <span className="creator-tag">👑 Creator</span>}
                     <span style={{ color: SC.steel, fontSize: "0.75rem" }}>{Object.keys(players).length} in room</span>
                   </div>
+                  {room?.creatorId && players[room.creatorId] && !isCreator && (
+                    <div style={{ fontSize: "0.72rem", color: SC.slate }}>
+                      👑 <strong style={{ color: SC.inkLight }}>{players[room.creatorId].name}</strong> is the creator
+                    </div>
+                  )}
                 </div>
                 {revealed && (
                   <button className="btn btn-snap" onClick={() => setShowSnapshot(true)}>📸 Snapshot</button>
                 )}
               </div>
+
+              {/* New creator toast */}
+              {isNewCreator && (
+                <div className="new-creator-toast slide-up">
+                  👑 You are now the session creator — you can start voting and reveal votes.
+                </div>
+              )}
 
               <div className="story-panel slide-up">
                 <div className="story-hdr">
@@ -733,6 +790,11 @@ export default function PlanningPoker() {
                     <button className="btn btn-primary" onClick={startVoting} disabled={!room?.story}>
                       ▶ Start Voting
                     </button>
+                  )}
+                  {votingStarted && !revealed && countdown !== null && (
+                    <div className={`countdown-badge ${countdown <= 5 ? "urgent" : ""}`}>
+                      ⏱ {countdown}s
+                    </div>
                   )}
                   {!votingStarted && !canControl && (
                     <div className="po-observer">⏳ Waiting for the session creator to start voting…</div>
