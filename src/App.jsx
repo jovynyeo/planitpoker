@@ -414,10 +414,19 @@ export default function PlanningPoker() {
 
   async function castVote(val) {
     if (room?.revealed || myRole === "PO") return;
-    await mutateRoom(r => ({
+    // Update UI instantly
+    setRoom(r => ({
       ...r,
       players: { ...r.players, [myId]: { ...r.players[myId], vote: val } },
     }));
+    // Sync to Supabase in background
+    const current = await fetchRoom(roomId);
+    if (!current) return;
+    const updated = {
+      ...current,
+      players: { ...current.players, [myId]: { ...current.players[myId], vote: val } },
+    };
+    await upsertRoom(roomId, updated);
   }
 
   async function revealVotes() {
