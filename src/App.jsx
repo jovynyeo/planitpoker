@@ -184,6 +184,23 @@ input::placeholder{color:${SC.steel};}
 .pulse{animation:pulse 2s infinite;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.5;}}
 .po-observer{background:${SC.offWhite};border:1px solid ${SC.silver};border-radius:10px;padding:14px 20px;color:${SC.slate};font-size:0.82rem;}
+.pending-box{background:#fffbeb;border:1px solid rgba(240,165,0,0.3);border-radius:10px;padding:14px 20px;}
+.pending-title{font-size:0.72rem;font-weight:700;color:#c47f00;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;}
+.pending-list{display:flex;flex-wrap:wrap;gap:8px;}
+.pending-tag{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:20px;font-size:0.78rem;font-weight:600;border:1px solid transparent;}
+.pending-tag.RTIM{background:rgba(0,132,127,0.1);color:${SC.teal};border-color:rgba(0,132,127,0.2);}
+.pending-tag.QA{background:rgba(21,101,192,0.1);color:${SC.blueLight};border-color:rgba(21,101,192,0.2);}
+.pending-tag.ACM{background:rgba(240,165,0,0.12);color:#c47f00;border-color:rgba(240,165,0,0.25);}
+.pending-role{font-weight:400;opacity:0.7;}
+.agreed-squads-section{background:${SC.white};border:1px solid ${SC.silver};border-radius:12px;padding:20px 24px;display:flex;flex-direction:column;gap:14px;box-shadow:0 2px 8px rgba(0,48,135,0.04);}
+.agreed-squad-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;background:${SC.offWhite};border-radius:8px;}
+.agreed-squad-label{font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;padding:4px 10px;border-radius:6px;min-width:52px;text-align:center;}
+.agreed-squad-label.RTIM{background:rgba(0,132,127,0.1);color:${SC.teal};}
+.agreed-squad-label.QA{background:rgba(21,101,192,0.1);color:${SC.blueLight};}
+.agreed-squad-label.ACM{background:rgba(240,165,0,0.12);color:#c47f00;}
+.agreed-confirmed{font-size:0.78rem;color:${SC.teal};font-weight:600;white-space:nowrap;}
+.agreed-chip.readonly{cursor:default;opacity:0.5;}
+.agreed-chip.readonly:hover{border-color:${SC.silver};color:${SC.ink};background:${SC.offWhite};transform:none;}
 @media(max-width:600px){.main{padding:16px 12px 60px;}.role-grid{grid-template-columns:repeat(2,1fr);}.snap-av{font-size:2rem;}}
 `;
 
@@ -238,7 +255,7 @@ function SnapshotModal({ room, onClose }) {
 
   const players = room.players || {};
   const story = room.story || "(No story title set)";
-  const agreed = room.agreedPoints;
+  const squadAgreedPoints = room.squadAgreedPoints || {};
   const date = new Date().toLocaleString("en-SG", { dateStyle: "medium", timeStyle: "short" });
   const squadsWithVotes = SQUADS.filter(sq =>
     Object.values(players).some(p => p.squad === sq && p.vote !== null)
@@ -263,8 +280,16 @@ function SnapshotModal({ room, onClose }) {
           <div className="snap-story">{story}</div>
           <div className="snap-agreed-box">
             <div>
-              <div className="snap-al">Final Agreed Story Points</div>
-              <div className="snap-av">{agreed ?? <span style={{ opacity: 0.5, fontSize: "1.8rem" }}>Not set</span>}</div>
+              <div className="snap-al">Agreed Story Points</div>
+              <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:8}}>
+                {SQUADS.map(sq => squadAgreedPoints[sq] ? (
+                  <div key={sq} style={{textAlign:"center"}}>
+                    <div style={{fontSize:"0.65rem",color:"rgba(255,255,255,0.6)",textTransform:"uppercase",letterSpacing:"0.08em"}}>{sq}</div>
+                    <div style={{fontFamily:"DM Serif Display,serif",fontSize:"2rem",color:"white",lineHeight:1}}>{squadAgreedPoints[sq]}</div>
+                  </div>
+                ) : null)}
+                {!SQUADS.some(sq => squadAgreedPoints[sq]) && <div className="snap-av" style={{opacity:0.5,fontSize:"1.8rem"}}>Not set</div>}
+              </div>
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.6)", marginBottom: 6 }}>Squads estimated</div>
@@ -381,7 +406,9 @@ export default function PlanningPoker() {
     const id = genId();
     const effectiveSquad = myRole === "PO" ? null : myRole;
     const initial = {
-      id, story: "", revealed: false, agreedPoints: null,
+      id, story: "", revealed: false, votingStarted: false,
+      agreedPoints: null, squadAgreedPoints: {},
+      creatorId: myId,
       players: { [myId]: { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() } },
       history: [],
     };
@@ -414,27 +441,26 @@ export default function PlanningPoker() {
 
   async function castVote(val) {
     if (room?.revealed || myRole === "PO") return;
-    // Update UI instantly
-    setRoom(r => ({
+    await mutateRoom(r => ({
       ...r,
       players: { ...r.players, [myId]: { ...r.players[myId], vote: val } },
     }));
-    // Sync to Supabase in background
-    const current = await fetchRoom(roomId);
-    if (!current) return;
-    const updated = {
-      ...current,
-      players: { ...current.players, [myId]: { ...current.players[myId], vote: val } },
-    };
-    await upsertRoom(roomId, updated);
+  }
+
+  async function startVoting() {
+    await mutateRoom(r => ({ ...r, votingStarted: true }));
   }
 
   async function revealVotes() {
     await mutateRoom(r => ({ ...r, revealed: true }));
   }
 
-  async function setAgreedPoints(val) {
-    await mutateRoom(r => ({ ...r, agreedPoints: r.agreedPoints === val ? null : val }));
+  async function setSquadAgreedPoints(squad, val) {
+    await mutateRoom(r => {
+      const squadAgreedPoints = { ...(r.squadAgreedPoints || {}) };
+      squadAgreedPoints[squad] = squadAgreedPoints[squad] === val ? null : val;
+      return { ...r, squadAgreedPoints };
+    });
   }
 
   async function newRound() {
@@ -443,11 +469,11 @@ export default function PlanningPoker() {
       const squads = {};
       SQUADS.forEach(sq => { const s = squadStats(r.players, sq, true); if (s && s.count > 0) squads[sq] = s; });
       const history = r.revealed && r.story
-        ? [{ story: r.story, agreedPoints: r.agreedPoints, avg: avg(numericVotes), squads, ts: Date.now() }, ...(r.history || [])].slice(0, 10)
+        ? [{ story: r.story, squadAgreedPoints: r.squadAgreedPoints || {}, avg: avg(numericVotes), squads, ts: Date.now() }, ...(r.history || [])].slice(0, 10)
         : (r.history || []);
       const players = {};
       for (const [pid, p] of Object.entries(r.players)) players[pid] = { ...p, vote: null };
-      return { ...r, story: "", revealed: false, agreedPoints: null, players, history };
+      return { ...r, story: "", revealed: false, votingStarted: false, agreedPoints: null, squadAgreedPoints: {}, players, history };
     });
     setStoryInput("");
   }
@@ -503,6 +529,12 @@ export default function PlanningPoker() {
   const squadComplete = sq => revealed && Object.values(players).some(p => p.squad === sq && p.vote !== null);
   const isPO = myRole === "PO";
   const isMySquadTab = effectiveSquad === activeSquad;
+  const isCreator = room?.creatorId === myId;
+  const canControl = isCreator || isPO;
+  const votingStarted = room?.votingStarted || false;
+  const squadAgreedPoints = room?.squadAgreedPoints || {};
+  // Non-PO, non-voting players who haven't voted yet
+  const pendingVoters = Object.values(players).filter(p => p.role !== "PO" && p.vote === null);
 
   return (
     <>
@@ -671,34 +703,58 @@ export default function PlanningPoker() {
               )}
 
               {revealed && (
-                <div className="agreed-section slide-up">
-                  <div className="agreed-label">Agreed Points</div>
-                  <div className="agreed-chips">
-                    {FIBONACCI.filter(v => v !== "?").map(v => (
-                      <div key={v} className={`agreed-chip ${room.agreedPoints === v ? "selected" : ""}`}
-                        onClick={() => setAgreedPoints(v)}>{v}</div>
-                    ))}
-                  </div>
-                  {room.agreedPoints && (
-                    <span style={{ fontSize: "0.78rem", color: SC.teal, fontWeight: 600 }}>✓ {room.agreedPoints} pts agreed</span>
-                  )}
+                <div className="agreed-squads-section slide-up">
+                  <div className="section-label">Agreed Story Points by Squad</div>
+                  {SQUADS.map(sq => {
+                    const sqHasVotes = Object.values(players).some(p => p.squad === sq && p.vote !== null);
+                    if (!sqHasVotes) return null;
+                    return (
+                      <div key={sq} className="agreed-squad-row">
+                        <div className={`agreed-squad-label ${sq}`}>{sq}</div>
+                        <div className="agreed-chips">
+                          {FIBONACCI.filter(v => v !== "?").map(v => (
+                            <div key={v}
+                              className={`agreed-chip ${squadAgreedPoints[sq] === v ? "selected" : ""} ${!canControl ? "readonly" : ""}`}
+                              onClick={() => canControl && setSquadAgreedPoints(sq, v)}>{v}</div>
+                          ))}
+                        </div>
+                        {squadAgreedPoints[sq] && (
+                          <span className="agreed-confirmed">✓ {squadAgreedPoints[sq]} pts</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
               <div className="controls-row slide-up">
-                {!revealed ? (
-                  <button className="btn btn-blue" onClick={revealVotes} disabled={!anyVoted}>
-                    {anyVoted ? "Reveal All Votes →" : "Waiting for votes…"}
-                  </button>
-                ) : (
-                  <button className="btn btn-blue" onClick={newRound}>Start New Round →</button>
-                )}
+                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                  {!votingStarted && canControl && (
+                    <button className="btn btn-primary" onClick={startVoting} disabled={!room?.story}>
+                      ▶ Start Voting
+                    </button>
+                  )}
+                  {!votingStarted && !canControl && (
+                    <div className="po-observer">⏳ Waiting for the session creator to start voting…</div>
+                  )}
+                  {votingStarted && !revealed && canControl && (
+                    <button className="btn btn-blue" onClick={revealVotes} disabled={!anyVoted}>
+                      {anyVoted ? "Reveal All Votes →" : "Waiting for votes…"}
+                    </button>
+                  )}
+                  {votingStarted && !revealed && !canControl && (
+                    <div className="po-observer">🗳️ Voting in progress — cast your vote below.</div>
+                  )}
+                  {revealed && canControl && (
+                    <button className="btn btn-blue" onClick={newRound}>Start New Round →</button>
+                  )}
+                </div>
                 {revealed && (
                   <button className="btn btn-snap" onClick={() => setShowSnapshot(true)}>📸 Take Snapshot</button>
                 )}
               </div>
 
-              {!revealed && !isPO && isMySquadTab && (
+              {!revealed && !isPO && isMySquadTab && votingStarted && (
                 <div className="voting-panel slide-up">
                   <div className="voting-hdr">
                     <div className="voting-title">Cast Your Vote — {activeSquad}</div>
@@ -712,11 +768,22 @@ export default function PlanningPoker() {
                 </div>
               )}
 
-              {!revealed && isPO && (
+              {!revealed && votingStarted && pendingVoters.length > 0 && (
+                <div className="pending-box slide-up">
+                  <div className="pending-title">⏳ Still waiting on:</div>
+                  <div className="pending-list">
+                    {pendingVoters.map((p, i) => (
+                      <span key={i} className={`pending-tag ${p.squad || "PO"}`}>{p.name} <span className="pending-role">· {p.role}</span></span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!revealed && isPO && votingStarted && (
                 <div className="po-observer">👁 As PO, you're observing all squads. Votes are hidden until revealed.</div>
               )}
 
-              {!revealed && !isPO && !isMySquadTab && (
+              {!revealed && !isPO && !isMySquadTab && votingStarted && (
                 <div className="po-observer">Switch to the <strong>{effectiveSquad}</strong> tab to cast your vote.</div>
               )}
 
