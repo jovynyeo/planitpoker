@@ -459,7 +459,7 @@ export default function PlanningPoker() {
       }
       // Someone left
       for (const [pid, p] of Object.entries(prev)) {
-        if (!curr[pid] && pid !== myId) addNotif(`${p.name} left the room 👋`, "#9CA3AF");
+        if (!curr[pid] && pid !== myId) addNotif(`${p.name} (${p.role}) left the room 👋`, "#9CA3AF");
       }
     }
     prevPlayersRef.current = curr;
@@ -704,12 +704,11 @@ export default function PlanningPoker() {
       <div className="app">
         <nav className="nav">
           <div className="nav-brand">
-            <div className="nav-logo">Planit<span> Poker</span> 🃏</div>
+            <div className="nav-logo">Planit<span> Poker</span></div>
           </div>
           <div className="nav-right">
             {screen === "game" && me && (
               <>
-                <span className="nav-chip">{me.name} · {me.role}</span>
                 <button className="btn btn-danger" onClick={leaveRoom}>Peace out ✌️</button>
               </>
             )}
@@ -833,7 +832,7 @@ export default function PlanningPoker() {
                     <span>{Object.keys(players).length} in room</span>
                     <span className="room-meta-divider">·</span>
                     {room?.creatorId && players[room.creatorId] ? (
-                      <span>👑 <strong style={{color: C.inkLight}}>{isCreator ? "You" : players[room.creatorId].name}</strong> is the creator</span>
+                      <span>👑 {isCreator ? <strong style={{color: C.inkLight}}>You're the creator</strong> : <><strong style={{color: C.inkLight}}>{players[room.creatorId].name}</strong> is the creator</>}</span>
                     ) : null}
                   </div>
                 </div>
