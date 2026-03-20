@@ -104,14 +104,18 @@ input::placeholder{color:${C.steel};}
 .divider::before,.divider::after{content:'';flex:1;height:1px;background:${C.silver};}
 
 /* ROOM BAR */
-.room-bar{background:${C.white};border:2px solid ${C.silver};border-radius:14px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,0.04);}
-.room-info{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-.room-code{display:flex;align-items:center;gap:8px;background:${C.offWhite};border:2px solid ${C.silver};border-radius:8px;padding:5px 12px;}
+.room-bar{background:${C.white};border:2px solid ${C.silver};border-radius:14px;padding:14px 20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 2px 12px rgba(0,0,0,0.04);}
+.room-bar-top{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+.room-bar-bottom{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-top:10px;border-top:1px solid ${C.silver};}
+.room-info{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.room-code{display:flex;align-items:center;gap:8px;background:${C.offWhite};border:2px solid ${C.silver};border-radius:8px;padding:6px 14px;}
 .room-code .lbl{font-size:0.6rem;color:${C.slate};text-transform:uppercase;letter-spacing:0.1em;font-weight:700;}
-.room-code .val{font-size:0.92rem;font-weight:400;color:${C.purpleDark};letter-spacing:0.06em;font-family:'DM Serif Display',serif;}
-.copy-btn{background:${C.purpleDark};border:none;color:white;cursor:pointer;font-size:0.65rem;padding:3px 9px;border-radius:5px;font-family:'Inter',sans-serif;font-weight:700;transition:opacity 0.15s;letter-spacing:0.05em;text-transform:uppercase;}
+.room-code .val{font-size:0.95rem;font-weight:400;color:${C.purpleDark};letter-spacing:0.06em;font-family:'DM Serif Display',serif;}
+.copy-btn{background:${C.purpleDark};border:none;color:white;cursor:pointer;font-size:0.65rem;padding:4px 10px;border-radius:5px;font-family:'Inter',sans-serif;font-weight:700;transition:opacity 0.15s;letter-spacing:0.05em;text-transform:uppercase;}
 .copy-btn:hover{opacity:0.85;}
-.me-badge{display:flex;align-items:center;gap:7px;font-size:0.8rem;color:${C.inkLight};}
+.me-badge{display:flex;align-items:center;gap:7px;font-size:0.82rem;color:${C.inkLight};}
+.room-meta{display:flex;align-items:center;gap:6px;font-size:0.78rem;color:${C.slate};}
+.room-meta-divider{color:${C.steel};}
 
 /* ROLE TAGS */
 .role-tag{padding:3px 10px;border-radius:20px;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;}
@@ -522,6 +526,16 @@ export default function PlanningPoker() {
         setLoading(false);
         return;
       }
+      // Check for duplicate name:role combo (excluding own myId in case of rejoin)
+      const dupKey = `${myName.trim().toLowerCase()}:${myRole}`;
+      const duplicate = Object.entries(r.players || {}).find(([pid, p]) =>
+        pid !== myId && `${p.name.toLowerCase()}:${p.role}` === dupKey
+      );
+      if (duplicate) {
+        setRoomCodeError(`"${myName.trim()}" as ${myRole} is already in this room. Try a different name or role.`);
+        setLoading(false);
+        return;
+      }
       r.players[myId] = { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
       const joiningKey = `${myName.trim().toLowerCase()}:${myRole}`;
       if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) r.creatorId = myId;
@@ -611,23 +625,41 @@ export default function PlanningPoker() {
     prevCreatorIdRef.current = currId;
   }, [room?.creatorId]);
 
-  // Tab/browser close cleanup using synchronous XHR (sendBeacon can't do REST PATCH)
+  // Keep a snapshot of the latest room data for use in beforeunload
+  const roomSnapshotRef = useRef(null);
+  useEffect(() => { roomSnapshotRef.current = room; }, [room]);
+
+  // Tab/browser close — use keepalive fetch to PATCH Supabase directly
   useEffect(() => {
     if (!roomId) return;
-    const handleUnload = (e) => {
-      // Use synchronous XHR — the only reliable way to fire on tab close
+    const handleUnload = () => {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       if (!supabaseUrl || !supabaseKey) return;
-      // We do a blind fetch using keepalive flag — fires even as page unloads
-      const roomSnapshot = roomIdRef.current;
-      if (!roomSnapshot) return;
-      fetch(`${supabaseUrl}/rest/v1/rpc/leave_room_on_close`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": supabaseKey, "Authorization": `Bearer ${supabaseKey}` },
-        body: JSON.stringify({ p_room_id: roomSnapshot, p_player_id: myId }),
+      const currentRoom = roomSnapshotRef.current;
+      if (!currentRoom) return;
+      // Remove self from players
+      const players = { ...currentRoom.players };
+      delete players[myId];
+      // Hand off creator if needed
+      let creatorId = currentRoom.creatorId;
+      if (creatorId === myId) {
+        const remaining = Object.entries(players).sort((a, b) => (a[1].joinedAt||0)-(b[1].joinedAt||0));
+        creatorId = remaining.length > 0 ? remaining[0][0] : null;
+      }
+      const updatedData = { ...currentRoom, players, creatorId };
+      // Use keepalive fetch — fires reliably on tab close
+      fetch(`${supabaseUrl}/rest/v1/rooms?id=eq.${roomId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": supabaseKey,
+          "Authorization": `Bearer ${supabaseKey}`,
+          "Prefer": "return=minimal",
+        },
+        body: JSON.stringify({ data: updatedData, updated_at: new Date().toISOString() }),
         keepalive: true,
-      }).catch(() => {});
+      });
     };
     window.addEventListener("beforeunload", handleUnload);
     return () => window.removeEventListener("beforeunload", handleUnload);
@@ -785,27 +817,35 @@ export default function PlanningPoker() {
                 display: "contents",
               }}>
               <div className="room-bar slide-up">
-                <div className="room-info">
-                  <div className="room-code">
-                    <div><div className="lbl">Room</div><div className="val">{roomId}</div></div>
-                    <button className="copy-btn" onClick={copyRoomId}>{copied ? "✓" : "Copy"}</button>
+                {/* Top row: room code + actions */}
+                <div className="room-bar-top">
+                  <div className="room-info">
+                    <div className="room-code">
+                      <div className="lbl">Room</div>
+                      <div className="val">{roomId}</div>
+                      <button className="copy-btn" onClick={copyRoomId}>{copied ? "✓" : "Copy"}</button>
+                    </div>
+                    <button className="btn btn-share" onClick={shareUrl}>
+                      {copiedUrl ? "✓ Copied!" : "🔗 Invite"}
+                    </button>
                   </div>
-                  <button className="btn btn-share" onClick={shareUrl}>
-                    {copiedUrl ? "✓ Copied!" : "🔗 Invite friends"}
-                  </button>
+                  <div className="room-meta">
+                    <span>{Object.keys(players).length} in room</span>
+                    <span className="room-meta-divider">·</span>
+                    {room?.creatorId && players[room.creatorId] ? (
+                      <span>👑 <strong style={{color: C.inkLight}}>{isCreator ? "You" : players[room.creatorId].name}</strong> is the creator</span>
+                    ) : null}
+                  </div>
+                </div>
+                {/* Bottom row: your identity + snapshot */}
+                <div className="room-bar-bottom">
                   <div className="me-badge">
                     <span style={{ fontWeight: 600 }}>{me?.name}</span>
                     <span className={`role-tag ${myRole}`}>{myRole}</span>
                     {isCreator && <span className="creator-tag">👑 Creator</span>}
-                    <span style={{ color: C.steel, fontSize: "0.72rem" }}>{Object.keys(players).length} in room</span>
                   </div>
-                  {room?.creatorId && players[room.creatorId] && !isCreator && (
-                    <div style={{ fontSize: "0.72rem", color: C.slate }}>
-                      👑 <strong style={{ color: C.inkLight }}>{players[room.creatorId].name}</strong> is running the show
-                    </div>
-                  )}
+                  {revealed && <button className="btn btn-snap" onClick={() => setShowSnapshot(true)}>📸 Snapshot</button>}
                 </div>
-                {revealed && <button className="btn btn-snap" onClick={() => setShowSnapshot(true)}>📸 Snapshot</button>}
               </div>
 
               {/* Modals */}
@@ -819,7 +859,7 @@ export default function PlanningPoker() {
                     </div>
                     <div className="modal-actions">
                       <button className="btn btn-outline" onClick={() => setShowLeaveConfirm(false)}>Nah, I'll stay 😅</button>
-                      <button className="btn btn-danger" style={{ border: "2px solid rgba(239,68,68,0.3)" }} onClick={doLeave}>Yeah, I'm out ✌️</button>
+                      <button className="btn" style={{background:C.red,color:"white",flex:1,justifyContent:"center"}} onClick={doLeave}>Yeah, I'm out ✌️</button>
                     </div>
                   </div>
                 </div>
@@ -909,7 +949,7 @@ export default function PlanningPoker() {
                           {revealed && p.vote !== null ? p.vote : ""}
                         </div>
                         {p.vote !== null && !revealed && <span className="status-badge badge-voted-s"><span className="badge-dot" />voted!</span>}
-                        {p.vote === null && <span className="status-badge badge-waiting pulse"><span className="badge-dot" />thinking...</span>}
+                        {p.vote === null && votingStarted && !revealed && <span className="status-badge badge-waiting pulse"><span className="badge-dot" />thinking...</span>}
                       </div>
                     ))}
                   </div>
