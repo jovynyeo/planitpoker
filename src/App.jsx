@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase";
 
 const FIBONACCI = ["?", "0", "0.5", "1", "2", "3", "5", "8", "13", "20", "☕"];
-const SQUADS = ["RTIM", "QA", "ACM"];
-const ROLES = ["PO", "RTIM", "QA", "ACM"];
+const SQUADS = ["PEGA", "QA", "ACM"];
+const ROLES = ["PO", "PEGA", "QA", "ACM"];
 
 // 🎨 Balanced palette — solid, clean, fun but professional
 const C = {
@@ -34,7 +34,7 @@ const C = {
 
 const ROLE_COLORS = {
   PO:   { bg:"#6366F1", bgLight:"rgba(99,102,241,0.08)",  bgGlow:"rgba(99,102,241,0.18)",  gradient:"#6366F1", squadGradient:"#6366F1" },
-  RTIM: { bg:"#10B981", bgLight:"rgba(16,185,129,0.08)",  bgGlow:"rgba(16,185,129,0.18)",  gradient:"#10B981", squadGradient:"#10B981" },
+  PEGA: { bg:"#10B981", bgLight:"rgba(16,185,129,0.08)",  bgGlow:"rgba(16,185,129,0.18)",  gradient:"#10B981", squadGradient:"#10B981" },
   QA:   { bg:"#06B6D4", bgLight:"rgba(6,182,212,0.08)",   bgGlow:"rgba(6,182,212,0.18)",   gradient:"#06B6D4", squadGradient:"#06B6D4" },
   ACM:  { bg:"#F97316", bgLight:"rgba(249,115,22,0.08)",  bgGlow:"rgba(249,115,22,0.18)",  gradient:"#F97316", squadGradient:"#F97316" },
 };
@@ -120,7 +120,7 @@ input::placeholder{color:${C.steel};}
 /* ROLE TAGS */
 .role-tag{padding:3px 10px;border-radius:20px;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;}
 .role-tag.PO{background:rgba(99,102,241,0.1);color:${C.purpleDark};}
-.role-tag.RTIM{background:rgba(16,185,129,0.1);color:${C.green};}
+.role-tag.PEGA{background:rgba(16,185,129,0.1);color:${C.green};}
 .role-tag.QA{background:rgba(6,182,212,0.1);color:${C.cyan};}
 .role-tag.ACM{background:rgba(249,115,22,0.1);color:${C.orange};}
 .creator-tag{background:linear-gradient(135deg,rgba(251,191,36,0.2),rgba(249,115,22,0.1));color:${C.orange};border:1px solid rgba(251,191,36,0.4);border-radius:20px;padding:3px 10px;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;}
@@ -128,7 +128,7 @@ input::placeholder{color:${C.steel};}
 /* P ROLE TAGS */
 .p-role-tag{font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:2px 7px;border-radius:10px;}
 .p-role-tag.PO{background:rgba(99,102,241,0.1);color:${C.purpleDark};}
-.p-role-tag.RTIM{background:rgba(16,185,129,0.1);color:${C.green};}
+.p-role-tag.PEGA{background:rgba(16,185,129,0.1);color:${C.green};}
 .p-role-tag.QA{background:rgba(6,182,212,0.1);color:${C.cyan};}
 .p-role-tag.ACM{background:rgba(249,115,22,0.1);color:${C.orange};}
 
@@ -196,7 +196,7 @@ input::placeholder{color:${C.steel};}
 .agreed-squads-section{background:${C.white};border:2px solid ${C.silver};border-radius:14px;padding:18px 22px;display:flex;flex-direction:column;gap:13px;}
 .agreed-squad-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:${C.offWhite};border-radius:10px;}
 .agreed-squad-label{font-size:0.7rem;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;padding:4px 10px;border-radius:6px;min-width:52px;text-align:center;}
-.agreed-squad-label.RTIM{background:rgba(16,185,129,0.12);color:${C.green};}
+.agreed-squad-label.PEGA{background:rgba(16,185,129,0.12);color:${C.green};}
 .agreed-squad-label.QA{background:rgba(6,182,212,0.12);color:${C.cyan};}
 .agreed-squad-label.ACM{background:rgba(249,115,22,0.12);color:${C.orange};}
 .agreed-chips{display:flex;gap:5px;flex-wrap:wrap;}
@@ -223,7 +223,7 @@ input::placeholder{color:${C.steel};}
 .pending-title{font-size:0.7rem;font-weight:800;color:${C.orange};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;}
 .pending-list{display:flex;flex-wrap:wrap;gap:7px;}
 .pending-tag{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:20px;font-size:0.78rem;font-weight:700;border:2px solid transparent;}
-.pending-tag.RTIM{background:rgba(16,185,129,0.1);color:${C.green};border-color:rgba(16,185,129,0.25);}
+.pending-tag.PEGA{background:rgba(16,185,129,0.1);color:${C.green};border-color:rgba(16,185,129,0.25);}
 .pending-tag.QA{background:rgba(6,182,212,0.1);color:${C.cyan};border-color:rgba(6,182,212,0.25);}
 .pending-tag.ACM{background:rgba(249,115,22,0.1);color:${C.orange};border-color:rgba(249,115,22,0.25);}
 .pending-role{font-weight:500;opacity:0.75;}
@@ -240,7 +240,7 @@ input::placeholder{color:${C.steel};}
 .h-story{flex:1;color:${C.inkLight};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;}
 .h-squad-tags{display:flex;gap:6px;}
 .h-sq{font-size:0.64rem;font-weight:700;padding:2px 8px;border-radius:5px;letter-spacing:0.04em;}
-.h-sq.RTIM{background:rgba(16,185,129,0.1);color:${C.green};}
+.h-sq.PEGA{background:rgba(16,185,129,0.1);color:${C.green};}
 .h-sq.QA{background:rgba(6,182,212,0.1);color:${C.cyan};}
 .h-sq.ACM{background:rgba(249,115,22,0.1);color:${C.orange};}
 .h-agreed{font-family:'DM Serif Display',serif;font-size:1.1rem;color:${C.purpleDark};font-weight:400;min-width:28px;text-align:right;}
@@ -264,7 +264,7 @@ input::placeholder{color:${C.steel};}
 .snap-squads{display:flex;flex-direction:column;gap:12px;}
 .snap-squad{border:2px solid ${C.silver};border-radius:10px;overflow:hidden;}
 .snap-sq-hdr{padding:10px 14px;font-size:0.72rem;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;display:flex;align-items:center;justify-content:space-between;}
-.snap-sq-hdr.RTIM{background:rgba(16,185,129,0.1);color:${C.green};}
+.snap-sq-hdr.PEGA{background:rgba(16,185,129,0.1);color:${C.green};}
 .snap-sq-hdr.QA{background:rgba(6,182,212,0.1);color:${C.cyan};}
 .snap-sq-hdr.ACM{background:rgba(249,115,22,0.1);color:${C.orange};}
 .snap-sq-avg{font-family:'DM Serif Display',serif;font-size:0.95rem;font-weight:400;}
@@ -507,7 +507,7 @@ export default function PlanningPoker() {
     };
     try {
       await upsertRoom(id, initial);
-      setActiveSquad(effectiveSquad || "RTIM"); setRoomId(id); setRoom(initial); setScreen("game");
+      setActiveSquad(effectiveSquad || "PEGA"); setRoomId(id); setRoom(initial); setScreen("game");
     } catch { setError("Couldn't create the room — check your connection and try again!"); }
     setLoading(false);
   }
@@ -540,7 +540,7 @@ export default function PlanningPoker() {
       const joiningKey = `${myName.trim().toLowerCase()}:${myRole}`;
       if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) r.creatorId = myId;
       await upsertRoom(id, r);
-      setActiveSquad(effectiveSquad || "RTIM"); setRoomId(id); setRoom(r); setScreen("game");
+      setActiveSquad(effectiveSquad || "PEGA"); setRoomId(id); setRoom(r); setScreen("game");
     } catch { setError("Something went wrong — check your connection and try again."); }
     setLoading(false);
   }
@@ -678,7 +678,7 @@ export default function PlanningPoker() {
   const myVote = me?.vote ?? null;
   const revealed = room?.revealed || false;
   const effectiveSquad = myRole === "PO" ? null : myRole;
-  const resolvedSquad = activeSquad || "RTIM";
+  const resolvedSquad = activeSquad || "PEGA";
   const squadPlayers = Object.entries(players).filter(([, p]) => p.squad === resolvedSquad);
   const anyVoted = Object.values(players).some(p => p.vote !== null);
   const activeStats = squadStats(players, resolvedSquad, revealed);
@@ -693,7 +693,7 @@ export default function PlanningPoker() {
   const canControl = isCreator || isPO;
   const votingStarted = room?.votingStarted || false;
   const squadAgreedPoints = room?.squadAgreedPoints || {};
-  const SQUAD_ORDER = { RTIM: 0, QA: 1, ACM: 2 };
+  const SQUAD_ORDER = { PEGA: 0, QA: 1, ACM: 2 };
   const pendingVoters = Object.values(players)
     .filter(p => p.role !== "PO" && p.vote === null)
     .sort((a, b) => { const sa = SQUAD_ORDER[a.squad] ?? 99, sb = SQUAD_ORDER[b.squad] ?? 99; return sa !== sb ? sa - sb : a.name.localeCompare(b.name); });
@@ -721,7 +721,7 @@ export default function PlanningPoker() {
             <div className="setup-container slide-up">
               <div className="setup-hero">
                 <h1>Stop arguing,<br /><em>start pointing.</em></h1>
-                <p>Real-time story estimation for RTIM, QA & ACM squads. No spreadsheets. No drama. Just vibes and Fibonacci. 🃏</p>
+                <p>Real-time story estimation for PEGA, QA & ACM squads. No spreadsheets. No drama. Just vibes and Fibonacci. 🃏</p>
               </div>
               <div className="setup-card">
                 <div className="sc-header">
@@ -1050,7 +1050,7 @@ export default function PlanningPoker() {
                   <div className="pending-title">👀 Still waiting on these folks:</div>
                   <div className="pending-list">
                     {pendingVoters.map((p, i) => (
-                      <span key={i} className={`pending-tag ${p.squad || "RTIM"}`}>{p.name} <span className="pending-role">· {p.role}</span></span>
+                      <span key={i} className={`pending-tag ${p.squad || "PEGA"}`}>{p.name} <span className="pending-role">· {p.role}</span></span>
                     ))}
                   </div>
                 </div>
