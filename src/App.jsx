@@ -197,11 +197,9 @@ input::placeholder{color:${C.steel};}
 .vote-card:hover{border-color:var(--role-color,${C.purpleDark});color:var(--role-color,${C.purpleDark});transform:translateY(-5px) scale(1.04);box-shadow:0 6px 18px var(--role-glow,rgba(79,70,229,0.18));background:var(--role-bg-light,${C.purpleLight});}
 .vote-card.selected{border-color:var(--role-color,${C.purpleDark});background:var(--role-color,${C.purpleDark});color:white;transform:translateY(-7px) scale(1.07);box-shadow:0 8px 22px var(--role-glow,rgba(79,70,229,0.25));}
 .card-wrap{position:relative;display:inline-flex;flex-direction:column;align-items:center;}
-.card-tooltip{position:absolute;top:calc(100% + 12px);left:50%;transform:translateX(-50%) translateY(4px);background:${C.ink};color:white;border-radius:10px;padding:12px 16px;width:200px;pointer-events:none;opacity:0;transition:opacity 0.18s,transform 0.18s;z-index:100;box-shadow:0 8px 24px rgba(0,0,0,0.22);text-align:left;}
-.card-wrap:hover .card-tooltip{opacity:1;transform:translateX(-50%) translateY(0);}
+.card-tooltip-fixed{position:fixed;background:${C.ink};color:white;border-radius:10px;padding:12px 16px;width:210px;pointer-events:none;z-index:9999;box-shadow:0 8px 28px rgba(0,0,0,0.28);text-align:left;}
 .card-tooltip-label{font-size:0.68rem;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.09em;margin-bottom:5px;}
-.card-tooltip-desc{font-size:0.8rem;line-height:1.5;color:rgba(255,255,255,0.92);}
-.card-tooltip-arrow{position:absolute;top:-5px;left:50%;transform:translateX(-50%);width:10px;height:10px;background:${C.ink};clip-path:polygon(50% 0,0 100%,100% 100%);}
+.card-tooltip-desc{font-size:0.82rem;line-height:1.5;color:rgba(255,255,255,0.92);}
 
 /* RESULTS */
 .results-banner{background:${C.purpleDark};border-radius:12px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;}
@@ -455,6 +453,15 @@ export default function PlanningPoker() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [countdown, setCountdown] = useState(null);
+  const [hoveredCard, setHoveredCard] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  function handleCardMouseEnter(val, e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setHoveredCard(val);
+    setTooltipPos({ x: rect.left + rect.width / 2, y: rect.bottom + 12 });
+  }
+  function handleCardMouseLeave() { setHoveredCard(null); }
   const [notifications, setNotifications] = useState([]);
   const prevPlayersRef = useRef(null);
 
@@ -1058,15 +1065,10 @@ export default function PlanningPoker() {
                   </div>
                   <div className="cards-row">
                     {FIBONACCI.map(val => (
-                      <div key={val} className="card-wrap">
+                      <div key={val} className="card-wrap"
+                        onMouseEnter={e => handleCardMouseEnter(val, e)}
+                        onMouseLeave={handleCardMouseLeave}>
                         <div className={`vote-card ${myVote === val ? "selected" : ""}`} onClick={() => castVote(val)}>{val}</div>
-                        {CARD_INFO[val] && (
-                          <div className="card-tooltip">
-                            <div className="card-tooltip-label">{CARD_INFO[val].label}</div>
-                            <div className="card-tooltip-desc">{CARD_INFO[val].desc}</div>
-                            <div className="card-tooltip-arrow" />
-                          </div>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -1116,6 +1118,15 @@ export default function PlanningPoker() {
       </div>
 
       {showSnapshot && room && <SnapshotModal room={room} onClose={() => setShowSnapshot(false)} />}
+      {hoveredCard && CARD_INFO[hoveredCard] && (
+        <div className="card-tooltip-fixed" style={{
+          left: Math.min(tooltipPos.x - 105, window.innerWidth - 230),
+          top: tooltipPos.y,
+        }}>
+          <div className="card-tooltip-label">{CARD_INFO[hoveredCard].label}</div>
+          <div className="card-tooltip-desc">{CARD_INFO[hoveredCard].desc}</div>
+        </div>
+      )}
       <div className="notif-container">
         {notifications.map(n => (
           <div key={n.id} className={`notif${n.leaving ? " leaving" : ""}`}>
