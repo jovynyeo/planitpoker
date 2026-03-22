@@ -562,7 +562,9 @@ export default function PlanningPoker() {
       if (!r) return;
       // Auto-heal: if creatorId is null but originalCreatorId is still in the room, restore it
       if (!r.creatorId && r.originalCreatorId && r.players?.[r.originalCreatorId]) {
-        const healed = { ...r, creatorId: r.originalCreatorId };
+        const ogPlayer = r.players[r.originalCreatorId];
+        const ogKey = `${ogPlayer.name.toLowerCase()}:${ogPlayer.role.toLowerCase()}`;
+        const healed = { ...r, creatorId: r.originalCreatorId, hostKey: ogKey };
         await upsertRoom(roomId, healed);
         setRoom(healed);
       } else {
@@ -589,6 +591,7 @@ export default function PlanningPoker() {
       id, story: "", revealed: false, votingStarted: false,
       agreedPoints: null, squadAgreedPoints: {},
       creatorId: myId, originalCreatorId: myId, originalCreatorKey: creatorKey,
+      hostKey: creatorKey,
       players: { [myId]: { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() } },
       history: [],
     };
@@ -637,10 +640,10 @@ export default function PlanningPoker() {
       // Reclaim host if: key matches, OR room is empty (no one else here), OR creatorId is null
       if (r.originalCreatorKey && joiningKey === r.originalCreatorKey) {
         r.creatorId = myId;
-        r.originalCreatorKey = joiningKey; // keep in sync
+        r.originalCreatorKey = joiningKey;
+        r.hostKey = joiningKey;
       } else if (!r.creatorId || otherPlayers.length === 0) {
-        // Room is empty or has no host — whoever joins first becomes host
-        if (!r.creatorId) r.creatorId = myId;
+        if (!r.creatorId) { r.creatorId = myId; r.hostKey = joiningKey; }
       }
       await upsertRoom(id, r);
       setActiveSquad(effectiveSquad || "PEGA"); setRoomId(id); setRoom(r); setScreen("game");
@@ -746,10 +749,11 @@ export default function PlanningPoker() {
       r.players[myId] = { name, role, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
       const otherPlayersInRoom = Object.keys(r.players || {}).filter(pid => pid !== myId);
       if (r.originalCreatorKey && joiningKey === r.originalCreatorKey) {
-        r.creatorId = myId; // OG host reclaiming
-        r.originalCreatorKey = joiningKey; // keep key in sync
+        r.creatorId = myId;
+        r.originalCreatorKey = joiningKey;
+        r.hostKey = joiningKey;
       } else if (!r.creatorId || otherPlayersInRoom.length === 0) {
-        if (!r.creatorId) r.creatorId = myId; // no host — take over
+        if (!r.creatorId) { r.creatorId = myId; r.hostKey = joiningKey; }
       }
       await upsertRoom(rid, r);
       setMyName(name); setMyRole(role);
@@ -804,7 +808,10 @@ export default function PlanningPoker() {
     const updatedRoom = {
       ...freshRoom,
       // Update key if I am current host OR if I am the OG host (by originalCreatorId)
-      ...((amICurrentHost || amIOGHost) ? { originalCreatorKey: newCreatorKey } : {}),
+      ...((amICurrentHost || amIOGHost) ? { 
+        originalCreatorKey: newCreatorKey,
+        hostKey: newCreatorKey,
+      } : {}),
       players: {
         ...freshRoom.players,
         [myId]: {
@@ -929,7 +936,10 @@ export default function PlanningPoker() {
   // True if voting was started but all devs have since left
   const allDevsLeft = votingStarted && !revealed && !hasDevJoined;
   const isMySquadTab = effectiveSquad === resolvedSquad;
-  const isCreator = room?.creatorId === myId;
+  const myNameRoleKey = `${(me?.name || "").toLowerCase()}:${myRole.toLowerCase()}`;
+  const isCreator = room?.creatorId === myId || 
+    (room?.hostKey && room.hostKey === myNameRoleKey) ||
+    (room?.originalCreatorKey && room.originalCreatorKey === myNameRoleKey && !room?.creatorId);
   const canControl = isCreator || isPO;
   const votingStarted = room?.votingStarted || false;
   const squadAgreedPoints = room?.squadAgreedPoints || {};
