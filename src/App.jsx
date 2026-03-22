@@ -485,53 +485,59 @@ export default function PlanningPoker() {
   }
 
   // Detect join/leave events by diffing players
-  const prevCreatorNotifRef = useRef(null);
+  const prevCreatorNotifRef = useRef("__INIT__");
 
+  // Player join/leave notifications
   useEffect(() => {
     if (!room || !roomId) return;
     const prev = prevPlayersRef.current;
     const curr = room.players || {};
-    const prevHostId = prevCreatorNotifRef.current;
     const currHostId = room.creatorId;
-
     if (prev !== null) {
-      // Someone joined
       for (const [pid, p] of Object.entries(curr)) {
         if (!prev[pid] && pid !== myId) {
-          const isHost = pid === currHostId;
+          // Was this person the OG host rejoining and reclaiming?
+          const isReclaimingHost = pid === currHostId && prevCreatorNotifRef.current !== "__INIT__" && prevCreatorNotifRef.current !== currHostId;
           addNotif(
-            isHost
-              ? `${p.name} rejoined and reclaimed host 👑`
+            isReclaimingHost
+              ? `${p.name} is back and reclaimed host 👑`
               : `${p.name} joined (${p.role}) 👋`,
-            isHost ? C.orange : (ROLE_COLORS[p.role]?.bg || "#6366F1")
+            isReclaimingHost ? C.orange : (ROLE_COLORS[p.role]?.bg || "#6366F1")
           );
         }
       }
-      // Someone left
       for (const [pid, p] of Object.entries(prev)) {
         if (!curr[pid] && pid !== myId) {
-          const wasHost = pid === prevHostId;
+          const wasHost = pid === prevCreatorNotifRef.current;
           if (wasHost) {
-            // Find who the new host is
             const newHost = currHostId && curr[currHostId];
-            const newHostMsg = newHost ? ` ${newHost.name} is now the host 👑` : "";
-            addNotif(`${p.name} (host) left the room.${newHostMsg}`, C.orange);
+            const suffix = newHost ? ` ${newHost.name} is now the host 👑` : "";
+            addNotif(`${p.name} (host) left.${suffix}`, C.orange);
           } else {
             addNotif(`${p.name} (${p.role}) left the room 👋`, "#9CA3AF");
           }
         }
       }
-      // Host changed without join/leave (e.g. OG reclaim)
-      if (prevHostId && currHostId && prevHostId !== currHostId && prev[currHostId] && curr[currHostId]) {
-        const newHost = curr[currHostId];
-        if (currHostId !== myId) {
-          addNotif(`${newHost.name} is now the host 👑`, C.orange);
-        }
-      }
     }
     prevPlayersRef.current = curr;
-    prevCreatorNotifRef.current = currHostId;
-  }, [room?.players, room?.creatorId]);
+  }, [room?.players]);
+
+  // Host change notification (without join/leave — e.g. silent reclaim)
+  useEffect(() => {
+    if (!room || !roomId) return;
+    const prevHostId = prevCreatorNotifRef.current;
+    const currHostId = room.creatorId;
+    if (prevHostId !== "__INIT__" && prevHostId !== currHostId && currHostId) {
+      const newHost = room.players?.[currHostId];
+      // Only notify others — the new host sees the modal instead
+      if (currHostId !== myId && newHost && room.players?.[prevHostId] === undefined) {
+        // Host changed AND old host is gone — already handled by leave notif
+      } else if (currHostId !== myId && newHost) {
+        addNotif(`${newHost.name} is now the host 👑`, C.orange);
+      }
+    }
+    prevCreatorNotifRef.current = currHostId ?? prevHostId;
+  }, [room?.creatorId]);
 
   // Read ?room= from URL on load
   useEffect(() => {
@@ -707,6 +713,9 @@ export default function PlanningPoker() {
       await upsertRoom(rid, r);
       setMyName(name); setMyRole(role);
       setActiveSquad(effectiveSquad || "PEGA");
+      // Initialise the ref to current creatorId BEFORE setting roomId
+      // so the useEffect doesn't fire a false isNewCreator on self-rejoin
+      prevCreatorIdRef.current = r.creatorId || "__INIT__";
       setRoomId(rid); setRoom(r); setScreen("game");
       window.history.replaceState(null, "", `?room=${rid}`);
       setLastRoom(null);
@@ -773,13 +782,22 @@ export default function PlanningPoker() {
   }, [allDevsLeft, canControl, roomId]);
 
   // Detect creator changes
-  const prevCreatorIdRef = useRef(null);
+  const prevCreatorIdRef = useRef("__INIT__"); // sentinel so first run is skipped
   useEffect(() => {
     if (!room || !roomId) return;
     const prevId = prevCreatorIdRef.current;
     const currId = room.creatorId;
-    if (currId === myId && prevId !== null && prevId !== myId) setIsNewCreator(true);
-    if (prevId === myId && currId !== null && currId !== myId) setOriginalCreatorReclaimed(true);
+    // Skip the very first run (room just loaded)
+    if (prevId !== "__INIT__") {
+      // Host handed TO me (I wasn't host before, now I am — but NOT because I just joined/reclaimed)
+      if (currId === myId && prevId !== null && prevId !== myId) {
+        setIsNewCreator(true);
+      }
+      // Host taken FROM me (I was host, now someone else is — OG reclaimed)
+      if (prevId === myId && currId !== null && currId !== myId) {
+        setOriginalCreatorReclaimed(true);
+      }
+    }
     prevCreatorIdRef.current = currId;
   }, [room?.creatorId]);
 
