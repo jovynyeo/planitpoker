@@ -494,6 +494,7 @@ export default function PlanningPoker() {
     const curr = room.players || {};
     const prevHostId = prevCreatorNotifRef.current;
     const currHostId = room.creatorId || null;
+    console.log("[notif effect] prevHostId:", prevHostId, "currHostId:", currHostId, "prev:", prev ? "set" : "null");
 
     if (prev !== null) {
       // ── Someone joined ──
@@ -615,7 +616,8 @@ export default function PlanningPoker() {
       }
       r.players[myId] = { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
       const joiningKey = `${myName.trim().toLowerCase()}:${myRole}`;
-      if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) r.creatorId = myId;
+      console.log("[joinRoom] joiningKey:", joiningKey, "originalCreatorKey:", r.originalCreatorKey, "match:", joiningKey === r.originalCreatorKey);
+      if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) { r.creatorId = myId; console.log("[joinRoom] reclaimed host!"); }
       await upsertRoom(id, r);
       setActiveSquad(effectiveSquad || "PEGA"); setRoomId(id); setRoom(r); setScreen("game");
       window.history.replaceState(null, "", `?room=${id}`);
@@ -711,7 +713,8 @@ export default function PlanningPoker() {
       if (duplicate) { setError(`"${name}" as ${role} is already in the room.`); setLoading(false); return; }
       r.players[myId] = { name, role, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
       const joiningKey = `${name.toLowerCase()}:${role}`;
-      if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) r.creatorId = myId;
+      console.log("[rejoin] joiningKey:", joiningKey, "originalCreatorKey:", r.originalCreatorKey, "match:", joiningKey === r.originalCreatorKey);
+      if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) { r.creatorId = myId; console.log("[rejoin] reclaimed host!"); }
       await upsertRoom(rid, r);
       setMyName(name); setMyRole(role);
       setActiveSquad(effectiveSquad || "PEGA");
@@ -757,10 +760,11 @@ export default function PlanningPoker() {
         },
       };
       // Update originalCreatorKey if this user is currently the host
-      // We use creatorId === myId as the check because originalCreatorId
-      // from a previous session won't match current myId after rejoin
+      console.log("[saveProfile] creatorId:", r.creatorId, "myId:", myId, "match:", r.creatorId === myId);
+      console.log("[saveProfile] current originalCreatorKey:", r.originalCreatorKey);
       if (r.creatorId === myId) {
         updatedRoom.originalCreatorKey = `${editName.trim().toLowerCase()}:${editRole}`;
+        console.log("[saveProfile] updated originalCreatorKey to:", updatedRoom.originalCreatorKey);
       }
       return updatedRoom;
     });
