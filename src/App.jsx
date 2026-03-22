@@ -130,6 +130,7 @@ input::placeholder{color:${C.steel};}
 .me-badge{display:flex;align-items:center;gap:7px;font-size:0.82rem;color:${C.inkLight};}
 .room-meta{display:flex;align-items:center;gap:6px;font-size:0.78rem;color:${C.slate};}
 .room-meta-divider{color:${C.steel};}
+.rejoin-banner{background:${C.purpleLight};border:2px solid rgba(99,102,241,0.2);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .edit-profile-btn{background:transparent;border:1px solid ${C.silver};border-radius:6px;padding:3px 9px;font-size:0.7rem;font-weight:600;color:${C.slate};cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.15s;}
 .edit-profile-btn:hover{border-color:${C.purpleDark};color:${C.purpleDark};}
 
@@ -452,6 +453,7 @@ export default function PlanningPoker() {
   const [isNewCreator, setIsNewCreator] = useState(false);
   const [originalCreatorReclaimed, setOriginalCreatorReclaimed] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [lastRoom, setLastRoom] = useState(null); // { roomId, myName, myRole } for rejoin
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
@@ -645,11 +647,40 @@ export default function PlanningPoker() {
         await upsertRoom(rid, { ...current, players, creatorId: newCreatorId });
       }
     } catch(e) { console.error("leaveRoom error", e); }
+    // Save last room details for rejoin
+    setLastRoom({ roomId: roomIdRef.current, name: me?.name || myName, role: me?.role || myRole });
     setRoomId(null); setRoom(null); setScreen("home"); setShowLeaveConfirm(false);
     window.history.replaceState(null, "", window.location.pathname);
   }
 
   function leaveRoom() { setShowLeaveConfirm(true); }
+
+  async function rejoinLastRoom() {
+    if (!lastRoom) return;
+    setLoading(true); setError("");
+    const { roomId: rid, name, role } = lastRoom;
+    const effectiveSquad = role === "PO" ? null : role;
+    try {
+      const r = await fetchRoom(rid);
+      if (!r) { setError("That room no longer exists."); setLastRoom(null); setLoading(false); return; }
+      // Check duplicate before rejoining
+      const dupKey = `${name.toLowerCase()}:${role}`;
+      const duplicate = Object.entries(r.players || {}).find(([pid, p]) =>
+        pid !== myId && `${p.name.toLowerCase()}:${p.role}` === dupKey
+      );
+      if (duplicate) { setError(`"${name}" as ${role} is already in the room.`); setLoading(false); return; }
+      r.players[myId] = { name, role, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
+      const joiningKey = `${name.toLowerCase()}:${role}`;
+      if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) r.creatorId = myId;
+      await upsertRoom(rid, r);
+      setMyName(name); setMyRole(role);
+      setActiveSquad(effectiveSquad || "PEGA");
+      setRoomId(rid); setRoom(r); setScreen("game");
+      window.history.replaceState(null, "", `?room=${rid}`);
+      setLastRoom(null);
+    } catch { setError("Couldn't rejoin — the room may no longer exist."); }
+    setLoading(false);
+  }
 
   async function openEditProfile() {
     setEditName(me?.name || "");
@@ -804,6 +835,18 @@ export default function PlanningPoker() {
                 </div>
                 <div className="sc-body">
                   {error && <div className="error-box">😬 {error}</div>}
+                  {lastRoom && !roomInput && (
+                    <div className="rejoin-banner fade-in">
+                      <div>
+                        <div style={{fontWeight:700,fontSize:"0.85rem",color:C.ink,marginBottom:2}}>👋 Welcome back, {lastRoom.name}!</div>
+                        <div style={{fontSize:"0.78rem",color:C.slate}}>Room <strong style={{color:C.purpleDark}}>{lastRoom.roomId}</strong> might still be going.</div>
+                      </div>
+                      <button className="btn btn-primary" style={{whiteSpace:"nowrap",fontSize:"0.8rem",padding:"8px 16px"}}
+                        onClick={rejoinLastRoom} disabled={loading}>
+                        {loading ? "Rejoining..." : "↩ Rejoin"}
+                      </button>
+                    </div>
+                  )}
                   {roomInput && (
                     <div className="prefilled-banner fade-in">
                       🎉 You've been invited to room <strong>{roomInput}</strong> — fill in your name and role to jump in!
@@ -811,7 +854,7 @@ export default function PlanningPoker() {
                   )}
                   <div className="field">
                     <div className="label">Your Name</div>
-                    <input value={myName} onChange={e => setMyName(e.target.value)} placeholder="e.g. Sarah, the QA wizard 🧙" autoFocus />
+                    <input value={myName} onChange={e => setMyName(e.target.value)} placeholder="e.g. Devi, the QA wizard 🧙" autoFocus />
                   </div>
                   <div className="field">
                     <div className="label">Your Role</div>
@@ -906,7 +949,7 @@ export default function PlanningPoker() {
                     <span>{Object.keys(players).length} in room</span>
                     <span className="room-meta-divider">·</span>
                     {room?.creatorId && players[room.creatorId] ? (
-                      <span>👑 {isCreator ? <strong style={{color: C.inkLight}}>You're the creator</strong> : <><strong style={{color: C.inkLight}}>{players[room.creatorId].name}</strong> is the creator</>}</span>
+                      <span>👑 {isCreator ? <strong style={{color: C.inkLight}}>You're the host</strong> : <><strong style={{color: C.inkLight}}>{players[room.creatorId].name}</strong> is the host</>}</span>
                     ) : null}
                   </div>
                 </div>
@@ -915,7 +958,7 @@ export default function PlanningPoker() {
                   <div className="me-badge">
                     <span style={{ fontWeight: 600 }}>{me?.name}</span>
                     <span className={`role-tag ${myRole}`}>{myRole}</span>
-                    {isCreator && <span className="creator-tag">👑 Creator</span>}
+                    {isCreator && <span className="creator-tag">👑 Host</span>}
                     <button className="edit-profile-btn" onClick={openEditProfile} title="Edit your name or role">✏️ Edit</button>
                   </div>
                   {revealed && <button className="btn btn-snap" onClick={() => setShowSnapshot(true)}>📸 Snapshot</button>}
@@ -929,7 +972,7 @@ export default function PlanningPoker() {
                     <div className="modal-icon">🏃💨</div>
                     <div className="modal-title">Bailing already?</div>
                     <div className="modal-body">
-                      Your team might miss you! Are you sure you want to leave this session? {isCreator && "You're the creator — someone else will take over. 👑"}
+                      Your team might miss you! Are you sure you want to leave this session? {isCreator && "You're the host — someone else will take over. 👑"}
                     </div>
                     <div className="modal-actions">
                       <button className="btn btn-outline" onClick={() => setShowLeaveConfirm(false)}>Nah, I'll stay 😅</button>
@@ -943,7 +986,7 @@ export default function PlanningPoker() {
                   <div className="modal-box slide-up">
                     <div className="modal-icon">🫡</div>
                     <div className="modal-title">The OG is back in town</div>
-                    <div className="modal-body">The original creator just walked back in and reclaimed their throne. You were a fantastic temp — truly — but the crown goes back where it belongs. Carry on, soldier! 👑</div>
+                    <div className="modal-body">The original host just walked back in and reclaimed their throne. You were a fantastic temp — truly — but the crown goes back where it belongs. Carry on, soldier! 👑</div>
                     <div className="modal-actions">
                       <button className="btn btn-outline" style={{ justifyContent: "center" }} onClick={() => setOriginalCreatorReclaimed(false)}>Fair enough 😄</button>
                     </div>
@@ -955,7 +998,7 @@ export default function PlanningPoker() {
                   <div className="modal-box slide-up" style={{maxWidth:420,textAlign:"left"}}>
                     <div className="modal-icon" style={{textAlign:"center"}}>👑</div>
                     <div className="modal-title" style={{textAlign:"center"}}>You're the boss now!</div>
-                    <div className="modal-body" style={{textAlign:"center"}}>The previous creator dipped — and you've been promoted. Don't let the power go to your head... or do. 😈</div>
+                    <div className="modal-body" style={{textAlign:"center"}}>The previous host dipped — and you've been promoted. Don't let the power go to your head... or do. 😈</div>
                     <div style={{display:"flex",flexDirection:"column",gap:10}}>
                       <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
                         <div style={{background:C.purpleLight,color:C.purpleDark,borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"0.78rem",flexShrink:0}}>1</div>
@@ -1073,7 +1116,7 @@ export default function PlanningPoker() {
                   ) : room.story ? (
                     <div className="story-text">{room.story}</div>
                   ) : (
-                    <div style={{ color: C.steel, fontStyle: "italic", fontSize: "0.9rem" }}>⏳ Waiting for the creator to drop the story...</div>
+                    <div style={{ color: C.steel, fontStyle: "italic", fontSize: "0.9rem" }}>⏳ Waiting for the host to drop the story...</div>
                   )}
                 </div>
               </div>
@@ -1189,7 +1232,7 @@ export default function PlanningPoker() {
                     </div>
                   )}
                   {!votingStarted && !canControl && (
-                    <div className="po-observer">⏳ Waiting for the creator to kick things off...</div>
+                    <div className="po-observer">⏳ Waiting for the host to kick things off...</div>
                   )}
                   {votingStarted && !revealed && canControl && (
                     <button className="btn btn-reveal" onClick={revealVotes} disabled={!anyVoted}>
