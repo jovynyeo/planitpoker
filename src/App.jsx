@@ -536,6 +536,7 @@ export default function PlanningPoker() {
     try {
       await upsertRoom(id, initial);
       setActiveSquad(effectiveSquad || "PEGA"); setRoomId(id); setRoom(initial); setScreen("game"); setShowCreatorWelcome(true);
+      window.history.replaceState(null, "", `?room=${id}`);
     } catch { setError("Couldn't create the room — check your connection and try again!"); }
     setLoading(false);
   }
@@ -569,6 +570,7 @@ export default function PlanningPoker() {
       if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) r.creatorId = myId;
       await upsertRoom(id, r);
       setActiveSquad(effectiveSquad || "PEGA"); setRoomId(id); setRoom(r); setScreen("game");
+      window.history.replaceState(null, "", `?room=${id}`);
     } catch { setError("Something went wrong — check your connection and try again."); }
     setLoading(false);
   }
@@ -638,6 +640,7 @@ export default function PlanningPoker() {
       }
     } catch(e) { console.error("leaveRoom error", e); }
     setRoomId(null); setRoom(null); setScreen("home"); setShowLeaveConfirm(false);
+    window.history.replaceState(null, "", window.location.pathname);
   }
 
   function leaveRoom() { setShowLeaveConfirm(true); }
@@ -1080,13 +1083,13 @@ export default function PlanningPoker() {
                         🎲 Start Voting!
                       </button>
                       {isPO && !hasDevJoined && (
-                        <div style={{fontSize:"0.72rem",color:C.slate,fontStyle:"italic",display:"flex",alignItems:"center",gap:5}}>
-                          <span style={{opacity:0.5}}>*</span> Waiting on at least one dev to join
+                        <div style={{fontSize:"0.71rem",color:C.steel,fontStyle:"italic",letterSpacing:"0.01em"}}>
+                          Waiting on at least one dev to join
                         </div>
                       )}
                       {!room?.story && hasDevJoined && (
-                        <div style={{fontSize:"0.72rem",color:C.slate,fontStyle:"italic",display:"flex",alignItems:"center",gap:5}}>
-                          <span style={{opacity:0.5}}>*</span> Set a story title first
+                        <div style={{fontSize:"0.71rem",color:C.steel,fontStyle:"italic",letterSpacing:"0.01em"}}>
+                          Set a story title first
                         </div>
                       )}
                     </div>
