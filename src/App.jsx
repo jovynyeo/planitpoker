@@ -487,17 +487,21 @@ export default function PlanningPoker() {
   // Detect join/leave events by diffing players
   const prevCreatorNotifRef = useRef("__INIT__");
 
-  // Player join/leave notifications
+  // Unified join/leave/host-change notifications — single effect, single ref update
   useEffect(() => {
     if (!room || !roomId) return;
     const prev = prevPlayersRef.current;
     const curr = room.players || {};
-    const currHostId = room.creatorId;
+    const prevHostId = prevCreatorNotifRef.current;
+    const currHostId = room.creatorId || null;
+
     if (prev !== null) {
+      // ── Someone joined ──
       for (const [pid, p] of Object.entries(curr)) {
         if (!prev[pid] && pid !== myId) {
-          // Was this person the OG host rejoining and reclaiming?
-          const isReclaimingHost = pid === currHostId && prevCreatorNotifRef.current !== "__INIT__" && prevCreatorNotifRef.current !== currHostId;
+          const isReclaimingHost = pid === currHostId
+            && prevHostId !== "__INIT__"
+            && prevHostId !== currHostId;
           addNotif(
             isReclaimingHost
               ? `${p.name} is back and reclaimed host 👑`
@@ -506,9 +510,11 @@ export default function PlanningPoker() {
           );
         }
       }
+
+      // ── Someone left ──
       for (const [pid, p] of Object.entries(prev)) {
         if (!curr[pid] && pid !== myId) {
-          const wasHost = pid === prevCreatorNotifRef.current;
+          const wasHost = prevHostId !== "__INIT__" && pid === prevHostId;
           if (wasHost) {
             const newHost = currHostId && curr[currHostId];
             const suffix = newHost ? ` ${newHost.name} is now the host 👑` : "";
@@ -518,26 +524,22 @@ export default function PlanningPoker() {
           }
         }
       }
-    }
-    prevPlayersRef.current = curr;
-  }, [room?.players]);
 
-  // Host change notification (without join/leave — e.g. silent reclaim)
-  useEffect(() => {
-    if (!room || !roomId) return;
-    const prevHostId = prevCreatorNotifRef.current;
-    const currHostId = room.creatorId;
-    if (prevHostId !== "__INIT__" && prevHostId !== currHostId && currHostId) {
-      const newHost = room.players?.[currHostId];
-      // Only notify others — the new host sees the modal instead
-      if (currHostId !== myId && newHost && room.players?.[prevHostId] === undefined) {
-        // Host changed AND old host is gone — already handled by leave notif
-      } else if (currHostId !== myId && newHost) {
-        addNotif(`${newHost.name} is now the host 👑`, C.orange);
+      // ── Host changed silently (no join/leave — e.g. edit-profile reclaim) ──
+      if (prevHostId !== "__INIT__" && prevHostId !== currHostId && currHostId) {
+        const prevHostStillHere = curr[prevHostId];
+        const newHost = curr[currHostId];
+        // Only fire if both old and new host are still in the room (pure transfer)
+        if (prevHostStillHere && newHost && currHostId !== myId) {
+          addNotif(`${newHost.name} is now the host 👑`, C.orange);
+        }
       }
     }
+
+    // Update refs ONCE at the end
+    prevPlayersRef.current = curr;
     prevCreatorNotifRef.current = currHostId ?? prevHostId;
-  }, [room?.creatorId]);
+  }, [JSON.stringify(room?.players), room?.creatorId]);
 
   // Read ?room= from URL on load
   useEffect(() => {
@@ -754,8 +756,10 @@ export default function PlanningPoker() {
           [myId]: { ...r.players[myId], name: editName.trim(), role: editRole, squad: effectiveSquad, vote: voteToKeep },
         },
       };
-      // If this user is the OG host, update the originalCreatorKey to reflect new name:role
-      if (r.originalCreatorId === myId) {
+      // Update originalCreatorKey if this user is currently the host
+      // We use creatorId === myId as the check because originalCreatorId
+      // from a previous session won't match current myId after rejoin
+      if (r.creatorId === myId) {
         updatedRoom.originalCreatorKey = `${editName.trim().toLowerCase()}:${editRole}`;
       }
       return updatedRoom;
