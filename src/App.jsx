@@ -750,7 +750,7 @@ export default function PlanningPoker() {
             <div className="setup-container slide-up">
               <div className="setup-hero">
                 <h1>Estimate together,<br /><em>ship with confidence.</em></h1>
-                <p>Align your team on effort and complexity — before you build. 1 point = 1 man-day.</p>
+                <p>Because "how long will this take?" deserves a real answer — from the whole team. 1 point = 1 man-day. 🙌</p>
               </div>
               <div className="setup-card">
                 <div className="sc-header">
@@ -1080,13 +1080,13 @@ export default function PlanningPoker() {
                         🎲 Start Voting!
                       </button>
                       {isPO && !hasDevJoined && (
-                        <div style={{fontSize:"0.72rem",color:C.slate,textAlign:"center"}}>
-                          Waiting for at least one dev to join before voting can start
+                        <div style={{fontSize:"0.72rem",color:C.slate,fontStyle:"italic",display:"flex",alignItems:"center",gap:5}}>
+                          <span style={{opacity:0.5}}>*</span> Waiting on at least one dev to join
                         </div>
                       )}
                       {!room?.story && hasDevJoined && (
-                        <div style={{fontSize:"0.72rem",color:C.slate,textAlign:"center"}}>
-                          Set a story title first to start voting
+                        <div style={{fontSize:"0.72rem",color:C.slate,fontStyle:"italic",display:"flex",alignItems:"center",gap:5}}>
+                          <span style={{opacity:0.5}}>*</span> Set a story title first
                         </div>
                       )}
                     </div>
