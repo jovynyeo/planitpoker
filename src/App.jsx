@@ -130,6 +130,7 @@ input::placeholder{color:${C.steel};}
 .me-badge{display:flex;align-items:center;gap:7px;font-size:0.82rem;color:${C.inkLight};}
 .room-meta{display:flex;align-items:center;gap:6px;font-size:0.78rem;color:${C.slate};}
 .room-meta-divider{color:${C.steel};}
+.all-left-banner{background:${C.offWhite};border:2px solid ${C.silver};border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:14px;}
 .rejoin-banner{background:${C.purpleLight};border:2px solid rgba(99,102,241,0.2);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .edit-profile-btn{background:transparent;border:1px solid ${C.silver};border-radius:6px;padding:3px 9px;font-size:0.7rem;font-weight:600;color:${C.slate};cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.15s;}
 .edit-profile-btn:hover{border-color:${C.purpleDark};color:${C.purpleDark};}
@@ -484,22 +485,53 @@ export default function PlanningPoker() {
   }
 
   // Detect join/leave events by diffing players
+  const prevCreatorNotifRef = useRef(null);
+
   useEffect(() => {
     if (!room || !roomId) return;
     const prev = prevPlayersRef.current;
     const curr = room.players || {};
+    const prevHostId = prevCreatorNotifRef.current;
+    const currHostId = room.creatorId;
+
     if (prev !== null) {
       // Someone joined
       for (const [pid, p] of Object.entries(curr)) {
-        if (!prev[pid] && pid !== myId) addNotif(`${p.name} joined (${p.role}) 👋`, ROLE_COLORS[p.role]?.bg || "#6366F1");
+        if (!prev[pid] && pid !== myId) {
+          const isHost = pid === currHostId;
+          addNotif(
+            isHost
+              ? `${p.name} rejoined and reclaimed host 👑`
+              : `${p.name} joined (${p.role}) 👋`,
+            isHost ? C.orange : (ROLE_COLORS[p.role]?.bg || "#6366F1")
+          );
+        }
       }
       // Someone left
       for (const [pid, p] of Object.entries(prev)) {
-        if (!curr[pid] && pid !== myId) addNotif(`${p.name} (${p.role}) left the room 👋`, "#9CA3AF");
+        if (!curr[pid] && pid !== myId) {
+          const wasHost = pid === prevHostId;
+          if (wasHost) {
+            // Find who the new host is
+            const newHost = currHostId && curr[currHostId];
+            const newHostMsg = newHost ? ` ${newHost.name} is now the host 👑` : "";
+            addNotif(`${p.name} (host) left the room.${newHostMsg}`, C.orange);
+          } else {
+            addNotif(`${p.name} (${p.role}) left the room 👋`, "#9CA3AF");
+          }
+        }
+      }
+      // Host changed without join/leave (e.g. OG reclaim)
+      if (prevHostId && currHostId && prevHostId !== currHostId && prev[currHostId] && curr[currHostId]) {
+        const newHost = curr[currHostId];
+        if (currHostId !== myId) {
+          addNotif(`${newHost.name} is now the host 👑`, C.orange);
+        }
       }
     }
     prevPlayersRef.current = curr;
-  }, [room?.players]);
+    prevCreatorNotifRef.current = currHostId;
+  }, [room?.players, room?.creatorId]);
 
   // Read ?room= from URL on load
   useEffect(() => {
@@ -704,19 +736,41 @@ export default function PlanningPoker() {
     const effectiveSquad = editRole === "PO" ? null : editRole;
     // If role changed, reset vote
     const voteToKeep = editRole === myRole ? (players[myId]?.vote ?? null) : null;
-    await mutateRoom(r => ({
-      ...r,
-      players: {
-        ...r.players,
-        [myId]: { ...r.players[myId], name: editName.trim(), role: editRole, squad: effectiveSquad, vote: voteToKeep },
-      },
-    }));
+    const isOGHost = r => r.originalCreatorId === myId;
+    await mutateRoom(r => {
+      const updatedRoom = {
+        ...r,
+        players: {
+          ...r.players,
+          [myId]: { ...r.players[myId], name: editName.trim(), role: editRole, squad: effectiveSquad, vote: voteToKeep },
+        },
+      };
+      // If this user is the OG host, update the originalCreatorKey to reflect new name:role
+      if (r.originalCreatorId === myId) {
+        updatedRoom.originalCreatorKey = `${editName.trim().toLowerCase()}:${editRole}`;
+      }
+      return updatedRoom;
+    });
     setMyName(editName.trim());
     setMyRole(editRole);
-    // Update active squad if role changed
     if (editRole !== myRole) setActiveSquad(effectiveSquad || "PEGA");
     setShowEditProfile(false);
   }
+
+  // Auto-reset session if all devs leave during an active vote
+  useEffect(() => {
+    if (!allDevsLeft || !canControl || !roomId) return;
+    // Small delay so the UI can show the empty state first
+    const t = setTimeout(async () => {
+      await mutateRoom(r => {
+        const players = {};
+        for (const [pid, p] of Object.entries(r.players)) players[pid] = { ...p, vote: null };
+        return { ...r, revealed: false, votingStarted: false, votingStartedAt: null, agreedPoints: null, squadAgreedPoints: {}, players };
+      });
+      setStoryInput("");
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [allDevsLeft, canControl, roomId]);
 
   // Detect creator changes
   const prevCreatorIdRef = useRef(null);
@@ -793,6 +847,8 @@ export default function PlanningPoker() {
   const squadComplete = sq => revealed && Object.values(players).some(p => p.squad === sq && p.vote !== null);
   const isPO = myRole === "PO";
   const hasDevJoined = Object.values(players).some(p => ["PEGA","QA","ACM"].includes(p.role) && p.squad !== null);
+  // True if voting was started but all devs have since left
+  const allDevsLeft = votingStarted && !revealed && !hasDevJoined;
   const isMySquadTab = effectiveSquad === resolvedSquad;
   const isCreator = room?.creatorId === myId;
   const canControl = isCreator || isPO;
@@ -1199,6 +1255,16 @@ export default function PlanningPoker() {
               )}
 
               {/* Countdown Timer */}
+              {allDevsLeft && (
+                <div className="all-left-banner slide-up">
+                  <div style={{fontSize:"1.3rem"}}>😶</div>
+                  <div>
+                    <div style={{fontWeight:700,color:C.ink,fontSize:"0.88rem"}}>Everyone left the room</div>
+                    <div style={{fontSize:"0.78rem",color:C.slate,marginTop:2}}>Resetting the session automatically...</div>
+                  </div>
+                </div>
+              )}
+
               {votingStarted && !revealed && countdown !== null && (
                 <div className="countdown-wrap slide-up">
                   <div className={`countdown-badge ${countdown <= 5 ? "urgent" : ""}`}>
