@@ -557,7 +557,18 @@ export default function PlanningPoker() {
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") { const r = await fetchRoom(roomId); if (r) setRoom(r); }
       });
-    const fallback = setInterval(async () => { const r = await fetchRoom(roomId); if (r) setRoom(r); }, 3000);
+    const fallback = setInterval(async () => {
+      const r = await fetchRoom(roomId);
+      if (!r) return;
+      // Auto-heal: if creatorId is null but originalCreatorId is still in the room, restore it
+      if (!r.creatorId && r.originalCreatorId && r.players?.[r.originalCreatorId]) {
+        const healed = { ...r, creatorId: r.originalCreatorId };
+        await upsertRoom(roomId, healed);
+        setRoom(healed);
+      } else {
+        setRoom(r);
+      }
+    }, 3000);
     return () => { supabase.removeChannel(channel); clearInterval(fallback); };
   }, [roomId]);
 
@@ -783,17 +794,17 @@ export default function PlanningPoker() {
     const freshRoom = await fetchRoom(roomId);
     if (!freshRoom) return;
 
-    // I am host if: creatorId matches me, OR creatorId is null and I'm the only player
     const onlyPlayer = Object.keys(freshRoom.players || {}).length <= 1;
     const amICurrentHost = freshRoom.creatorId === myId || (!freshRoom.creatorId && onlyPlayer);
-    // If I'm the only player with no host, restore creatorId
-    if (!freshRoom.creatorId && onlyPlayer) freshRoom.creatorId = myId;
+    const amIOGHost = freshRoom.originalCreatorId === myId;
+    // Restore creatorId if null and I should be host
+    if (!freshRoom.creatorId && (onlyPlayer || amIOGHost)) freshRoom.creatorId = myId;
     const newCreatorKey = `${editName.trim().toLowerCase()}:${editRole.toLowerCase()}`;
 
     const updatedRoom = {
       ...freshRoom,
-      // If I am the host right now, update the reclaim key to my new name:role
-      ...(amICurrentHost ? { originalCreatorKey: newCreatorKey } : {}),
+      // Update key if I am current host OR if I am the OG host (by originalCreatorId)
+      ...((amICurrentHost || amIOGHost) ? { originalCreatorKey: newCreatorKey } : {}),
       players: {
         ...freshRoom.players,
         [myId]: {
