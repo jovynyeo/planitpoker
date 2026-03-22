@@ -465,6 +465,7 @@ export default function PlanningPoker() {
   const [countdown, setCountdown] = useState(null);
   const [hoveredCard, setHoveredCard] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [notifications, setNotifications] = useState([]);
 
   function handleCardMouseEnter(val, e) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -472,7 +473,6 @@ export default function PlanningPoker() {
     setTooltipPos({ x: rect.left + rect.width / 2, y: rect.bottom + 12 });
   }
   function handleCardMouseLeave() { setHoveredCard(null); }
-  const [notifications, setNotifications] = useState([]);
   const prevPlayersRef = useRef(null);
 
   function addNotif(msg, color) {
