@@ -450,6 +450,7 @@ export default function PlanningPoker() {
   const [isNewCreator, setIsNewCreator] = useState(false);
   const [originalCreatorReclaimed, setOriginalCreatorReclaimed] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showCreatorWelcome, setShowCreatorWelcome] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [countdown, setCountdown] = useState(null);
@@ -534,7 +535,7 @@ export default function PlanningPoker() {
     };
     try {
       await upsertRoom(id, initial);
-      setActiveSquad(effectiveSquad || "PEGA"); setRoomId(id); setRoom(initial); setScreen("game");
+      setActiveSquad(effectiveSquad || "PEGA"); setRoomId(id); setRoom(initial); setScreen("game"); setShowCreatorWelcome(true);
     } catch { setError("Couldn't create the room — check your connection and try again!"); }
     setLoading(false);
   }
@@ -715,6 +716,7 @@ export default function PlanningPoker() {
     : {};
   const squadComplete = sq => revealed && Object.values(players).some(p => p.squad === sq && p.vote !== null);
   const isPO = myRole === "PO";
+  const hasDevJoined = Object.values(players).some(p => ["PEGA","QA","ACM"].includes(p.role) && p.squad !== null);
   const isMySquadTab = effectiveSquad === resolvedSquad;
   const isCreator = room?.creatorId === myId;
   const canControl = isCreator || isPO;
@@ -915,6 +917,44 @@ export default function PlanningPoker() {
                 </div>
               )}
 
+              {showCreatorWelcome && (
+                <div className="modal-overlay fade-in">
+                  <div className="modal-box slide-up" style={{maxWidth:420,textAlign:"left"}}>
+                    <div className="modal-icon" style={{textAlign:"center"}}>🎯</div>
+                    <div className="modal-title" style={{textAlign:"center"}}>Room created! Here's how to get started</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:14,margin:"4px 0"}}>
+                      <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+                        <div style={{background:C.purpleLight,color:C.purpleDark,borderRadius:"50%",width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"0.85rem",flexShrink:0}}>1</div>
+                        <div>
+                          <div style={{fontWeight:700,fontSize:"0.88rem",color:C.ink,marginBottom:2}}>Set the story title</div>
+                          <div style={{fontSize:"0.82rem",color:C.slate,lineHeight:1.5}}>Enter the name of the feature or story your team will be estimating. Be specific so everyone's on the same page.</div>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+                        <div style={{background:C.purpleLight,color:C.purpleDark,borderRadius:"50%",width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"0.85rem",flexShrink:0}}>2</div>
+                        <div>
+                          <div style={{fontWeight:700,fontSize:"0.88rem",color:C.ink,marginBottom:2}}>Share the invite link</div>
+                          <div style={{fontSize:"0.82rem",color:C.slate,lineHeight:1.5}}>Click <strong>🔗 Invite</strong> to copy a link and send it to your team. At least one engineer from PEGA, QA or ACM must join before voting can begin.</div>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+                        <div style={{background:C.purpleLight,color:C.purpleDark,borderRadius:"50%",width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"0.85rem",flexShrink:0}}>3</div>
+                        <div>
+                          <div style={{fontWeight:700,fontSize:"0.88rem",color:C.ink,marginBottom:2}}>Start voting when ready</div>
+                          <div style={{fontSize:"0.82rem",color:C.slate,lineHeight:1.5}}>Once the story is set and at least one dev has joined, hit <strong>🎲 Start Voting</strong> to kick things off. Votes stay hidden until you reveal them.</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{background:C.purpleLight,borderRadius:8,padding:"10px 14px",fontSize:"0.78rem",color:C.purpleDark,lineHeight:1.5,marginTop:4}}>
+                      💡 <strong>Remember:</strong> 1 point = 1 man-day. Points reflect both effort and complexity — not just time.
+                    </div>
+                    <button className="btn btn-primary" style={{width:"100%",justifyContent:"center",marginTop:4}} onClick={() => setShowCreatorWelcome(false)}>
+                      Got it, let's go! 🚀
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Story */}
               <div className="story-panel slide-up">
                 <div className="story-hdr">
@@ -1034,9 +1074,22 @@ export default function PlanningPoker() {
               <div className="controls-row slide-up">
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   {!votingStarted && canControl && (
-                    <button className="btn btn-fun" onClick={startVoting} disabled={!room?.story}>
-                      🎲 Start Voting!
-                    </button>
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      <button className="btn btn-fun" onClick={startVoting}
+                        disabled={!room?.story || (isPO && !hasDevJoined)}>
+                        🎲 Start Voting!
+                      </button>
+                      {isPO && !hasDevJoined && (
+                        <div style={{fontSize:"0.72rem",color:C.slate,textAlign:"center"}}>
+                          Waiting for at least one dev to join before voting can start
+                        </div>
+                      )}
+                      {!room?.story && hasDevJoined && (
+                        <div style={{fontSize:"0.72rem",color:C.slate,textAlign:"center"}}>
+                          Set a story title first to start voting
+                        </div>
+                      )}
+                    </div>
                   )}
                   {!votingStarted && !canControl && (
                     <div className="po-observer">⏳ Waiting for the creator to kick things off...</div>
