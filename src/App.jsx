@@ -130,6 +130,8 @@ input::placeholder{color:${C.steel};}
 .me-badge{display:flex;align-items:center;gap:7px;font-size:0.82rem;color:${C.inkLight};}
 .room-meta{display:flex;align-items:center;gap:6px;font-size:0.78rem;color:${C.slate};}
 .room-meta-divider{color:${C.steel};}
+.edit-profile-btn{background:transparent;border:1px solid ${C.silver};border-radius:6px;padding:3px 9px;font-size:0.7rem;font-weight:600;color:${C.slate};cursor:pointer;font-family:'Inter',sans-serif;transition:all 0.15s;}
+.edit-profile-btn:hover{border-color:${C.purpleDark};color:${C.purpleDark};}
 
 /* ROLE TAGS */
 .role-tag{padding:3px 10px;border-radius:20px;font-size:0.65rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;}
@@ -450,6 +452,10 @@ export default function PlanningPoker() {
   const [isNewCreator, setIsNewCreator] = useState(false);
   const [originalCreatorReclaimed, setOriginalCreatorReclaimed] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editRole, setEditRole] = useState("");
+  const [editError, setEditError] = useState("");
   const [showCreatorWelcome, setShowCreatorWelcome] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -644,6 +650,42 @@ export default function PlanningPoker() {
   }
 
   function leaveRoom() { setShowLeaveConfirm(true); }
+
+  async function openEditProfile() {
+    setEditName(me?.name || "");
+    setEditRole(myRole || "");
+    setEditError("");
+    setShowEditProfile(true);
+  }
+
+  async function saveProfile() {
+    if (!editName.trim() || !editRole) return;
+    setEditError("");
+    const newKey = `${editName.trim().toLowerCase()}:${editRole}`;
+    // Check for duplicates (exclude self)
+    const duplicate = Object.entries(players).find(([pid, p]) =>
+      pid !== myId && `${p.name.toLowerCase()}:${p.role}` === newKey
+    );
+    if (duplicate) {
+      setEditError(`"${editName.trim()}" as ${editRole} is already in this room.`);
+      return;
+    }
+    const effectiveSquad = editRole === "PO" ? null : editRole;
+    // If role changed, reset vote
+    const voteToKeep = editRole === myRole ? (players[myId]?.vote ?? null) : null;
+    await mutateRoom(r => ({
+      ...r,
+      players: {
+        ...r.players,
+        [myId]: { ...r.players[myId], name: editName.trim(), role: editRole, squad: effectiveSquad, vote: voteToKeep },
+      },
+    }));
+    setMyName(editName.trim());
+    setMyRole(editRole);
+    // Update active squad if role changed
+    if (editRole !== myRole) setActiveSquad(effectiveSquad || "PEGA");
+    setShowEditProfile(false);
+  }
 
   // Detect creator changes
   const prevCreatorIdRef = useRef(null);
@@ -874,6 +916,7 @@ export default function PlanningPoker() {
                     <span style={{ fontWeight: 600 }}>{me?.name}</span>
                     <span className={`role-tag ${myRole}`}>{myRole}</span>
                     {isCreator && <span className="creator-tag">👑 Creator</span>}
+                    <button className="edit-profile-btn" onClick={openEditProfile} title="Edit your name or role">✏️ Edit</button>
                   </div>
                   {revealed && <button className="btn btn-snap" onClick={() => setShowSnapshot(true)}>📸 Snapshot</button>}
                 </div>
@@ -909,12 +952,63 @@ export default function PlanningPoker() {
               )}
               {isNewCreator && (
                 <div className="modal-overlay fade-in">
-                  <div className="modal-box slide-up">
-                    <div className="modal-icon">👑</div>
-                    <div className="modal-title">You're the boss now!</div>
-                    <div className="modal-body">The previous creator dipped and you've been promoted! You can now set the story, fire the starting gun, and reveal those spicy votes. Don't let the power go to your head... or do. 😈</div>
+                  <div className="modal-box slide-up" style={{maxWidth:420,textAlign:"left"}}>
+                    <div className="modal-icon" style={{textAlign:"center"}}>👑</div>
+                    <div className="modal-title" style={{textAlign:"center"}}>You're the boss now!</div>
+                    <div className="modal-body" style={{textAlign:"center"}}>The previous creator dipped — and you've been promoted. Don't let the power go to your head... or do. 😈</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                        <div style={{background:C.purpleLight,color:C.purpleDark,borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"0.78rem",flexShrink:0}}>1</div>
+                        <div style={{fontSize:"0.82rem",color:C.slate,lineHeight:1.5}}><strong style={{color:C.ink}}>Set or update the story title</strong> — make sure everyone knows what's being estimated.</div>
+                      </div>
+                      <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                        <div style={{background:C.purpleLight,color:C.purpleDark,borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"0.78rem",flexShrink:0}}>2</div>
+                        <div style={{fontSize:"0.82rem",color:C.slate,lineHeight:1.5}}><strong style={{color:C.ink}}>Hit Start Voting</strong> when the team's ready — votes stay hidden until you reveal them.</div>
+                      </div>
+                      <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                        <div style={{background:C.purpleLight,color:C.purpleDark,borderRadius:"50%",width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"0.78rem",flexShrink:0}}>3</div>
+                        <div style={{fontSize:"0.82rem",color:C.slate,lineHeight:1.5}}><strong style={{color:C.ink}}>Reveal &amp; agree</strong> — once everyone's voted, reveal the cards and lock in the agreed points per squad.</div>
+                      </div>
+                    </div>
                     <div className="modal-actions">
-                      <button className="btn btn-primary" style={{ justifyContent: "center" }} onClick={() => setIsNewCreator(false)}>Let's gooo 🚀</button>
+                      <button className="btn btn-primary" style={{width:"100%",justifyContent:"center"}} onClick={() => setIsNewCreator(false)}>On it! 🚀</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {showEditProfile && (
+                <div className="modal-overlay fade-in">
+                  <div className="modal-box slide-up" style={{maxWidth:400,textAlign:"left"}}>
+                    <div className="modal-icon" style={{textAlign:"center"}}>✏️</div>
+                    <div className="modal-title" style={{textAlign:"center"}}>Update your details</div>
+                    {editError && <div className="error-box" style={{fontSize:"0.8rem"}}>❌ {editError}</div>}
+                    <div className="field">
+                      <div className="label">Your Name</div>
+                      <input value={editName} onChange={e => { setEditName(e.target.value); setEditError(""); }}
+                        placeholder="Your name" autoFocus
+                        onKeyDown={e => e.key === "Enter" && saveProfile()} />
+                    </div>
+                    <div className="field">
+                      <div className="label">Your Role</div>
+                      <div className="role-grid">
+                        {ROLES.map(r => (
+                          <div key={r}
+                            style={{"--role-color": ROLE_COLORS[r]?.bg, "--role-glow": ROLE_COLORS[r]?.bgGlow}}
+                            className={`role-pill ${editRole === r ? "selected" : ""}`}
+                            onClick={() => { setEditRole(r); setEditError(""); }}>{r}</div>
+                        ))}
+                      </div>
+                    </div>
+                    {editRole && editRole !== myRole && (
+                      <div style={{fontSize:"0.78rem",color:C.orange,background:C.orangeLight,padding:"8px 12px",borderRadius:8,border:`1px solid rgba(249,115,22,0.2)`}}>
+                        ⚠️ Changing your role will reset your current vote.
+                      </div>
+                    )}
+                    <div className="modal-actions">
+                      <button className="btn btn-outline" onClick={() => setShowEditProfile(false)}>Cancel</button>
+                      <button className="btn btn-primary" onClick={saveProfile}
+                        disabled={!editName.trim() || !editRole}>Save changes</button>
                     </div>
                   </div>
                 </div>
