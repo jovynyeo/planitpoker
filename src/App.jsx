@@ -603,18 +603,25 @@ export default function PlanningPoker() {
         setLoading(false);
         return;
       }
-      // Check for duplicate name:role combo (excluding own myId in case of rejoin)
-      const dupKey = `${myName.trim().toLowerCase()}:${myRole}`;
+      // Check for duplicate name:role combo
+      // Note: after page reload myId changes, so also check by name:role match
+      const dupKey = `${myName.trim().toLowerCase()}:${myRole.toLowerCase()}`;
       const duplicate = Object.entries(r.players || {}).find(([pid, p]) =>
-        pid !== myId && `${p.name.toLowerCase()}:${p.role}` === dupKey
+        pid !== myId && `${p.name.toLowerCase()}:${p.role.toLowerCase()}` === dupKey
       );
       if (duplicate) {
         setRoomCodeError(`"${myName.trim()}" as ${myRole} is already in this room. Try a different name or role.`);
         setLoading(false);
         return;
       }
-      r.players[myId] = { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
+      // Remove any ghost entry with same name:role from a previous session
       const joiningKey = `${myName.trim().toLowerCase()}:${myRole.toLowerCase()}`;
+      for (const [pid, p] of Object.entries(r.players || {})) {
+        if (pid !== myId && `${p.name.toLowerCase()}:${p.role.toLowerCase()}` === joiningKey) {
+          delete r.players[pid]; // remove stale ghost
+        }
+      }
+      r.players[myId] = { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
       const otherPlayers = Object.keys(r.players).filter(pid => pid !== myId);
       // Reclaim host if: key matches, OR room is empty (no one else here), OR creatorId is null
       if (r.originalCreatorKey && joiningKey === r.originalCreatorKey) {
@@ -713,13 +720,19 @@ export default function PlanningPoker() {
       const r = await fetchRoom(rid);
       if (!r) { setError("That room no longer exists."); setLastRoom(null); setLoading(false); return; }
       // Check duplicate before rejoining
-      const dupKey = `${name.toLowerCase()}:${role}`;
+      const dupKey = `${name.toLowerCase()}:${role.toLowerCase()}`;
       const duplicate = Object.entries(r.players || {}).find(([pid, p]) =>
-        pid !== myId && `${p.name.toLowerCase()}:${p.role}` === dupKey
+        pid !== myId && `${p.name.toLowerCase()}:${p.role.toLowerCase()}` === dupKey
       );
       if (duplicate) { setError(`"${name}" as ${role} is already in the room.`); setLoading(false); return; }
-      r.players[myId] = { name, role, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
+      // Remove ghost entry from previous session with same name:role
       const joiningKey = `${name.toLowerCase()}:${role.toLowerCase()}`;
+      for (const [pid, p] of Object.entries(r.players || {})) {
+        if (pid !== myId && `${p.name.toLowerCase()}:${p.role.toLowerCase()}` === joiningKey) {
+          delete r.players[pid];
+        }
+      }
+      r.players[myId] = { name, role, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
       const otherPlayersInRoom = Object.keys(r.players || {}).filter(pid => pid !== myId);
       if (r.originalCreatorKey && joiningKey === r.originalCreatorKey) {
         r.creatorId = myId; // OG host reclaiming
@@ -750,11 +763,15 @@ export default function PlanningPoker() {
   async function saveProfile() {
     if (!editName.trim() || !editRole) return;
     setEditError("");
-    const newKey = `${editName.trim().toLowerCase()}:${editRole}`;
-    // Check for duplicates (exclude self)
-    const duplicate = Object.entries(players).find(([pid, p]) =>
-      pid !== myId && `${p.name.toLowerCase()}:${p.role}` === newKey
-    );
+    const newKey = `${editName.trim().toLowerCase()}:${editRole.toLowerCase()}`;
+    // Check for duplicates — exclude self by BOTH pid AND current name:role
+    // (old session pid won't match new myId after page reload)
+    const myCurrentKey = `${(me?.name || "").toLowerCase()}:${myRole.toLowerCase()}`;
+    const duplicate = Object.entries(players).find(([pid, p]) => {
+      const pKey = `${p.name.toLowerCase()}:${p.role.toLowerCase()}`;
+      const isSelf = pid === myId || pKey === myCurrentKey;
+      return !isSelf && pKey === newKey;
+    });
     if (duplicate) {
       setEditError(`"${editName.trim()}" as ${editRole} is already in this room.`);
       return;
