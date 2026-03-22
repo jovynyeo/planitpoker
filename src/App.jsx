@@ -494,7 +494,6 @@ export default function PlanningPoker() {
     const curr = room.players || {};
     const prevHostId = prevCreatorNotifRef.current;
     const currHostId = room.creatorId || null;
-    console.log("[notif effect] prevHostId:", prevHostId, "currHostId:", currHostId, "prev:", prev ? "set" : "null");
 
     if (prev !== null) {
       // ── Someone joined ──
@@ -616,7 +615,6 @@ export default function PlanningPoker() {
       }
       r.players[myId] = { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
       const joiningKey = `${myName.trim().toLowerCase()}:${myRole.toLowerCase()}`;
-      console.log("[joinRoom] joiningKey:", joiningKey, "originalCreatorKey:", r.originalCreatorKey, "match:", joiningKey === r.originalCreatorKey);
       if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) { r.creatorId = myId; console.log("[joinRoom] reclaimed host!"); }
       await upsertRoom(id, r);
       setActiveSquad(effectiveSquad || "PEGA"); setRoomId(id); setRoom(r); setScreen("game");
@@ -714,7 +712,6 @@ export default function PlanningPoker() {
       if (duplicate) { setError(`"${name}" as ${role} is already in the room.`); setLoading(false); return; }
       r.players[myId] = { name, role, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
       const joiningKey = `${name.toLowerCase()}:${role.toLowerCase()}`;
-      console.log("[rejoin] joiningKey:", joiningKey, "originalCreatorKey:", r.originalCreatorKey, "match:", joiningKey === r.originalCreatorKey);
       if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) { r.creatorId = myId; console.log("[rejoin] reclaimed host!"); }
       await upsertRoom(rid, r);
       setMyName(name); setMyRole(role);
@@ -751,28 +748,28 @@ export default function PlanningPoker() {
     const effectiveSquad = editRole === "PO" ? null : editRole;
     // If role changed, reset vote
     const voteToKeep = editRole === myRole ? (players[myId]?.vote ?? null) : null;
-    // Fetch fresh room data directly
+    // Fetch latest room state directly from Supabase
     const freshRoom = await fetchRoom(roomId);
     if (!freshRoom) return;
 
-    console.log("[saveProfile] freshRoom.creatorId:", freshRoom.creatorId, "myId:", myId, "isCreator prop:", isCreator);
-    console.log("[saveProfile] freshRoom.originalCreatorKey:", freshRoom.originalCreatorKey);
+    const amICurrentHost = freshRoom.creatorId === myId;
+    const newCreatorKey = `${editName.trim().toLowerCase()}:${editRole.toLowerCase()}`;
 
     const updatedRoom = {
       ...freshRoom,
+      // If I am the host right now, update the reclaim key to my new name:role
+      ...(amICurrentHost ? { originalCreatorKey: newCreatorKey } : {}),
       players: {
         ...freshRoom.players,
-        [myId]: { ...freshRoom.players[myId], name: editName.trim(), role: editRole, squad: effectiveSquad, vote: voteToKeep },
+        [myId]: {
+          ...freshRoom.players[myId],
+          name: editName.trim(),
+          role: editRole,
+          squad: effectiveSquad,
+          vote: voteToKeep,
+        },
       },
     };
-
-    // Update originalCreatorKey — use isCreator from component scope (most reliable)
-    if (isCreator) {
-      updatedRoom.originalCreatorKey = `${editName.trim().toLowerCase()}:${editRole.toLowerCase()}`;
-      console.log("[saveProfile] ✅ updated originalCreatorKey to:", updatedRoom.originalCreatorKey);
-    } else {
-      console.log("[saveProfile] ❌ not host, skipping key update. creatorId:", freshRoom.creatorId, "myId:", myId);
-    }
 
     setRoom(updatedRoom);
     await upsertRoom(roomId, updatedRoom);
