@@ -750,24 +750,31 @@ export default function PlanningPoker() {
     const effectiveSquad = editRole === "PO" ? null : editRole;
     // If role changed, reset vote
     const voteToKeep = editRole === myRole ? (players[myId]?.vote ?? null) : null;
-    const isOGHost = r => r.originalCreatorId === myId;
-    await mutateRoom(r => {
-      const updatedRoom = {
-        ...r,
-        players: {
-          ...r.players,
-          [myId]: { ...r.players[myId], name: editName.trim(), role: editRole, squad: effectiveSquad, vote: voteToKeep },
-        },
-      };
-      // Update originalCreatorKey if this user is currently the host
-      console.log("[saveProfile] creatorId:", r.creatorId, "myId:", myId, "match:", r.creatorId === myId);
-      console.log("[saveProfile] current originalCreatorKey:", r.originalCreatorKey);
-      if (r.creatorId === myId) {
-        updatedRoom.originalCreatorKey = `${editName.trim().toLowerCase()}:${editRole}`;
-        console.log("[saveProfile] updated originalCreatorKey to:", updatedRoom.originalCreatorKey);
-      }
-      return updatedRoom;
-    });
+    // Fetch fresh room data directly
+    const freshRoom = await fetchRoom(roomId);
+    if (!freshRoom) return;
+
+    console.log("[saveProfile] freshRoom.creatorId:", freshRoom.creatorId, "myId:", myId, "isCreator prop:", isCreator);
+    console.log("[saveProfile] freshRoom.originalCreatorKey:", freshRoom.originalCreatorKey);
+
+    const updatedRoom = {
+      ...freshRoom,
+      players: {
+        ...freshRoom.players,
+        [myId]: { ...freshRoom.players[myId], name: editName.trim(), role: editRole, squad: effectiveSquad, vote: voteToKeep },
+      },
+    };
+
+    // Update originalCreatorKey — use isCreator from component scope (most reliable)
+    if (isCreator) {
+      updatedRoom.originalCreatorKey = `${editName.trim().toLowerCase()}:${editRole}`;
+      console.log("[saveProfile] ✅ updated originalCreatorKey to:", updatedRoom.originalCreatorKey);
+    } else {
+      console.log("[saveProfile] ❌ not host, skipping key update. creatorId:", freshRoom.creatorId, "myId:", myId);
+    }
+
+    setRoom(updatedRoom);
+    await upsertRoom(roomId, updatedRoom);
     setMyName(editName.trim());
     setMyRole(editRole);
     if (editRole !== myRole) setActiveSquad(effectiveSquad || "PEGA");
