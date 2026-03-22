@@ -574,7 +574,7 @@ export default function PlanningPoker() {
     setLoading(true); setError("");
     const id = genId();
     const effectiveSquad = myRole === "PO" ? null : myRole;
-    const creatorKey = `${myName.trim().toLowerCase()}:${myRole}`;
+    const creatorKey = `${myName.trim().toLowerCase()}:${myRole.toLowerCase()}`;
     const initial = {
       id, story: "", revealed: false, votingStarted: false,
       agreedPoints: null, squadAgreedPoints: {},
@@ -615,7 +615,7 @@ export default function PlanningPoker() {
         return;
       }
       r.players[myId] = { name: myName.trim(), role: myRole, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
-      const joiningKey = `${myName.trim().toLowerCase()}:${myRole}`;
+      const joiningKey = `${myName.trim().toLowerCase()}:${myRole.toLowerCase()}`;
       console.log("[joinRoom] joiningKey:", joiningKey, "originalCreatorKey:", r.originalCreatorKey, "match:", joiningKey === r.originalCreatorKey);
       if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) { r.creatorId = myId; console.log("[joinRoom] reclaimed host!"); }
       await upsertRoom(id, r);
@@ -689,6 +689,7 @@ export default function PlanningPoker() {
         await upsertRoom(rid, { ...current, players, creatorId: newCreatorId });
       }
     } catch(e) { console.error("leaveRoom error", e); }
+    intentionalLeaveRef.current = true; // tell beforeunload not to fire
     // Save last room details for rejoin
     setLastRoom({ roomId: roomIdRef.current, name: me?.name || myName, role: me?.role || myRole });
     setRoomId(null); setRoom(null); setScreen("home"); setShowLeaveConfirm(false);
@@ -712,7 +713,7 @@ export default function PlanningPoker() {
       );
       if (duplicate) { setError(`"${name}" as ${role} is already in the room.`); setLoading(false); return; }
       r.players[myId] = { name, role, squad: effectiveSquad, vote: null, joinedAt: Date.now() };
-      const joiningKey = `${name.toLowerCase()}:${role}`;
+      const joiningKey = `${name.toLowerCase()}:${role.toLowerCase()}`;
       console.log("[rejoin] joiningKey:", joiningKey, "originalCreatorKey:", r.originalCreatorKey, "match:", joiningKey === r.originalCreatorKey);
       if (r.originalCreatorKey && joiningKey === r.originalCreatorKey && r.creatorId !== myId) { r.creatorId = myId; console.log("[rejoin] reclaimed host!"); }
       await upsertRoom(rid, r);
@@ -767,7 +768,7 @@ export default function PlanningPoker() {
 
     // Update originalCreatorKey — use isCreator from component scope (most reliable)
     if (isCreator) {
-      updatedRoom.originalCreatorKey = `${editName.trim().toLowerCase()}:${editRole}`;
+      updatedRoom.originalCreatorKey = `${editName.trim().toLowerCase()}:${editRole.toLowerCase()}`;
       console.log("[saveProfile] ✅ updated originalCreatorKey to:", updatedRoom.originalCreatorKey);
     } else {
       console.log("[saveProfile] ❌ not host, skipping key update. creatorId:", freshRoom.creatorId, "myId:", myId);
@@ -819,11 +820,13 @@ export default function PlanningPoker() {
   // Keep a snapshot of the latest room data for use in beforeunload
   const roomSnapshotRef = useRef(null);
   useEffect(() => { roomSnapshotRef.current = room; }, [room]);
+  const intentionalLeaveRef = useRef(false); // prevents beforeunload double-firing
 
   // Tab/browser close — use keepalive fetch to PATCH Supabase directly
   useEffect(() => {
     if (!roomId) return;
     const handleUnload = () => {
+      if (intentionalLeaveRef.current) return; // already handled by doLeave
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       if (!supabaseUrl || !supabaseKey) return;
