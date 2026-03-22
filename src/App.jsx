@@ -385,7 +385,7 @@ function SnapshotModal({ room, onClose }) {
                 {SQUADS.map(sq => squadAgreedPoints[sq] ? (
                   <div key={sq} style={{ textAlign: "center" }}>
                     <div style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{sq}</div>
-                    <div style={{ fontFamily: 'Inter',sans-serif, fontSize: "2rem", fontWeight: 800, color: "white", lineHeight: 1 }}>{squadAgreedPoints[sq]}</div>
+                    <div style={{ fontFamily: "Inter,sans-serif", fontSize: "2rem", fontWeight: 800, color: "white", lineHeight: 1 }}>{squadAgreedPoints[sq]}</div>
                   </div>
                 ) : null)}
                 {!SQUADS.some(sq => squadAgreedPoints[sq]) && <div className="snap-av" style={{ opacity: 0.5, fontSize: "1.8rem" }}>Not set yet</div>}
