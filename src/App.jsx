@@ -2,6 +2,20 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase";
 
 const FIBONACCI = ["?", "0", "0.5", "1", "2", "3", "5", "8", "13", "20", "☕"];
+
+const CARD_INFO = {
+  "?":   { label: "Unsure",       desc: "Need more info before estimating. Let's discuss first." },
+  "0":   { label: "No effort",    desc: "Already done, or just a config change. Zero dev work needed." },
+  "0.5": { label: "~½ day",       desc: "A tiny tweak. Less than half a day's effort." },
+  "1":   { label: "~1 day",       desc: "Simple and well-understood. About 1 man-day of work." },
+  "2":   { label: "~2 days",      desc: "Straightforward but needs a bit of thought. Around 2 man-days." },
+  "3":   { label: "~3 days",      desc: "Moderate complexity with a few moving parts. About 3 man-days." },
+  "5":   { label: "~1 week",      desc: "Non-trivial. Some unknowns involved. Roughly a full week." },
+  "8":   { label: "~1.5 weeks",   desc: "Complex. Multiple components or dependencies at play." },
+  "13":  { label: "~2 weeks",     desc: "Very complex or poorly understood. Consider breaking it down." },
+  "20":  { label: "Too big",      desc: "Huge and hard to estimate confidently. Strongly recommend splitting this story." },
+  "☕":  { label: "Need a break", desc: "More context needed. Let's talk before we point this one." },
+};
 const SQUADS = ["PEGA", "QA", "ACM"];
 const ROLES = ["PO", "PEGA", "QA", "ACM"];
 
@@ -182,6 +196,12 @@ input::placeholder{color:${C.steel};}
 .vote-card{width:58px;height:82px;border-radius:10px;border:2px solid ${C.silver};background:${C.offWhite};display:flex;align-items:center;justify-content:center;font-family:'DM Serif Display',serif;font-size:1.35rem;font-weight:400;cursor:pointer;transition:all 0.15s cubic-bezier(0.34,1.56,0.64,1);color:${C.ink};user-select:none;box-shadow:0 2px 6px rgba(0,0,0,0.06);}
 .vote-card:hover{border-color:var(--role-color,${C.purpleDark});color:var(--role-color,${C.purpleDark});transform:translateY(-5px) scale(1.04);box-shadow:0 6px 18px var(--role-glow,rgba(79,70,229,0.18));background:var(--role-bg-light,${C.purpleLight});}
 .vote-card.selected{border-color:var(--role-color,${C.purpleDark});background:var(--role-color,${C.purpleDark});color:white;transform:translateY(-7px) scale(1.07);box-shadow:0 8px 22px var(--role-glow,rgba(79,70,229,0.25));}
+.card-wrap{position:relative;display:inline-flex;flex-direction:column;align-items:center;}
+.card-tooltip{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);background:${C.ink};color:white;border-radius:10px;padding:10px 14px;width:180px;pointer-events:none;opacity:0;transition:opacity 0.15s,transform 0.15s;transform:translateX(-50%) translateY(4px);z-index:50;box-shadow:0 6px 20px rgba(0,0,0,0.2);}
+.card-wrap:hover .card-tooltip{opacity:1;transform:translateX(-50%) translateY(0);}
+.card-tooltip-label{font-size:0.7rem;font-weight:700;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;}
+.card-tooltip-desc{font-size:0.78rem;line-height:1.45;color:white;}
+.card-tooltip-arrow{position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);width:10px;height:10px;background:${C.ink};clip-path:polygon(0 0,100% 0,50% 100%);}
 
 /* RESULTS */
 .results-banner{background:${C.purpleDark};border-radius:12px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;}
@@ -720,8 +740,8 @@ export default function PlanningPoker() {
           {screen === "home" && (
             <div className="setup-container slide-up">
               <div className="setup-hero">
-                <h1>Stop arguing,<br /><em>start pointing.</em></h1>
-                <p>Real-time story estimation for PEGA, QA & ACM squads. No spreadsheets. No drama. Just vibes and Fibonacci. 🃏</p>
+                <h1>Estimate together,<br /><em>ship with confidence.</em></h1>
+                <p>Align your team on effort and complexity — before you build. 1 point = 1 man-day.</p>
               </div>
               <div className="setup-card">
                 <div className="sc-header">
@@ -737,7 +757,7 @@ export default function PlanningPoker() {
                   )}
                   <div className="field">
                     <div className="label">Your Name</div>
-                    <input value={myName} onChange={e => setMyName(e.target.value)} placeholder="e.g. Devi, the QA wizard 🧙" autoFocus />
+                    <input value={myName} onChange={e => setMyName(e.target.value)} placeholder="e.g. Sarah, the QA wizard 🧙" autoFocus />
                   </div>
                   <div className="field">
                     <div className="label">Your Role</div>
@@ -1038,7 +1058,16 @@ export default function PlanningPoker() {
                   </div>
                   <div className="cards-row">
                     {FIBONACCI.map(val => (
-                      <div key={val} className={`vote-card ${myVote === val ? "selected" : ""}`} onClick={() => castVote(val)}>{val}</div>
+                      <div key={val} className="card-wrap">
+                        <div className={`vote-card ${myVote === val ? "selected" : ""}`} onClick={() => castVote(val)}>{val}</div>
+                        {CARD_INFO[val] && (
+                          <div className="card-tooltip">
+                            <div className="card-tooltip-label">{CARD_INFO[val].label}</div>
+                            <div className="card-tooltip-desc">{CARD_INFO[val].desc}</div>
+                            <div className="card-tooltip-arrow" />
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
