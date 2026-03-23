@@ -457,6 +457,7 @@ export default function PlanningPoker() {
   const [lastRoom, setLastRoom] = useState(null); // { roomId, myName, myRole } for rejoin
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showPassHost, setShowPassHost] = useState(false);
+  const [passedHostTo, setPassedHostTo] = useState(null); // name of who we passed to
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editError, setEditError] = useState("");
@@ -788,6 +789,7 @@ export default function PlanningPoker() {
     setRoom(updated);
     await upsertRoom(roomId, updated);
     setShowPassHost(false);
+    setPassedHostTo(newHostPlayer.name); // show confirmation instead of OG modal
   }
 
   async function openEditProfile() {
@@ -890,7 +892,8 @@ export default function PlanningPoker() {
       }
       // Host taken FROM me (I was host, now someone else is — OG reclaimed)
       if (prevId === myId && currId !== null && currId !== myId) {
-        setOriginalCreatorReclaimed(true);
+        // Only show "OG is back" if we didn't intentionally pass host
+        if (!passedHostTo) setOriginalCreatorReclaimed(true);
       }
     }
     prevCreatorIdRef.current = currId;
@@ -1163,6 +1166,19 @@ export default function PlanningPoker() {
                     <div className="modal-body">The original host just walked back in and reclaimed their throne. You were a fantastic temp — truly — but the crown goes back where it belongs. Carry on, soldier! 👑</div>
                     <div className="modal-actions">
                       <button className="btn btn-outline" style={{ justifyContent: "center" }} onClick={() => setOriginalCreatorReclaimed(false)}>Fair enough 😄</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {passedHostTo && (
+                <div className="modal-overlay fade-in">
+                  <div className="modal-box slide-up">
+                    <div className="modal-icon">🤝</div>
+                    <div className="modal-title">Host passed!</div>
+                    <div className="modal-body"><strong>{passedHostTo}</strong> is now the host. They can set stories, start voting, and reveal cards. You're back to being a regular participant.</div>
+                    <div className="modal-actions">
+                      <button className="btn btn-primary" style={{justifyContent:"center"}} onClick={() => setPassedHostTo(null)}>Got it 👍</button>
                     </div>
                   </div>
                 </div>
