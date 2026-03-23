@@ -456,6 +456,7 @@ export default function PlanningPoker() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [lastRoom, setLastRoom] = useState(null); // { roomId, myName, myRole } for rejoin
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showPassHost, setShowPassHost] = useState(false);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editError, setEditError] = useState("");
@@ -771,6 +772,22 @@ export default function PlanningPoker() {
       setLastRoom(null);
     } catch { setError("Couldn't rejoin — the room may no longer exist."); }
     setLoading(false);
+  }
+
+  async function passHost(newHostId) {
+    const freshRoom = await fetchRoom(roomId);
+    if (!freshRoom) return;
+    const newHostPlayer = freshRoom.players?.[newHostId];
+    if (!newHostPlayer) return;
+    const newHostKey = `${newHostPlayer.name.toLowerCase()}:${newHostPlayer.role.toLowerCase()}`;
+    const updated = {
+      ...freshRoom,
+      creatorId: newHostId,
+      hostKey: newHostKey,
+    };
+    setRoom(updated);
+    await upsertRoom(roomId, updated);
+    setShowPassHost(false);
   }
 
   async function openEditProfile() {
@@ -1113,6 +1130,9 @@ export default function PlanningPoker() {
                     <span style={{ fontWeight: 600 }}>{me?.name}</span>
                     <span className={`role-tag ${myRole}`}>{myRole}</span>
                     {isCreator && <span className="creator-tag">👑 Host</span>}
+                    {isCreator && Object.keys(players).filter(pid => pid !== myId).length > 0 && (
+                      <button className="edit-profile-btn" onClick={() => setShowPassHost(true)} title="Pass host to someone else">🤝 Pass host</button>
+                    )}
                     <button className="edit-profile-btn" onClick={openEditProfile} title="Edit your name or role">✏️ Edit</button>
                   </div>
                   {revealed && <button className="btn btn-snap" onClick={() => setShowSnapshot(true)}>📸 Snapshot</button>}
@@ -1169,6 +1189,40 @@ export default function PlanningPoker() {
                     </div>
                     <div className="modal-actions">
                       <button className="btn btn-primary" style={{width:"100%",justifyContent:"center"}} onClick={() => setIsNewCreator(false)}>On it! 🚀</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {showPassHost && (
+                <div className="modal-overlay fade-in">
+                  <div className="modal-box slide-up" style={{maxWidth:400,textAlign:"left"}}>
+                    <div className="modal-icon" style={{textAlign:"center"}}>🤝</div>
+                    <div className="modal-title" style={{textAlign:"center"}}>Pass the host</div>
+                    <div className="modal-body" style={{textAlign:"center"}}>Choose who takes over as host. They'll be able to set stories, start voting, and reveal cards.</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:4}}>
+                      {Object.entries(players)
+                        .filter(([pid]) => pid !== myId)
+                        .sort((a, b) => a[1].name.localeCompare(b[1].name))
+                        .map(([pid, p]) => (
+                          <button key={pid}
+                            onClick={() => passHost(pid)}
+                            style={{
+                              display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
+                              borderRadius:10,border:`2px solid ${C.silver}`,background:C.offWhite,
+                              cursor:"pointer",textAlign:"left",transition:"all 0.15s",fontFamily:"'Inter',sans-serif",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor=C.purpleDark; e.currentTarget.style.background=C.purpleLight; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor=C.silver; e.currentTarget.style.background=C.offWhite; }}
+                          >
+                            <span className={`role-tag ${p.role}`}>{p.role}</span>
+                            <span style={{fontWeight:600,fontSize:"0.88rem",color:C.ink}}>{p.name}</span>
+                          </button>
+                        ))
+                      }
+                    </div>
+                    <div className="modal-actions" style={{marginTop:8}}>
+                      <button className="btn btn-outline" style={{justifyContent:"center"}} onClick={() => setShowPassHost(false)}>Cancel</button>
                     </div>
                   </div>
                 </div>
