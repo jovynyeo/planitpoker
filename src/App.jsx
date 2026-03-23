@@ -700,6 +700,10 @@ export default function PlanningPoker() {
 
   const roomIdRef = useRef(roomId);
   useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
+  const intentionalLeaveRef = useRef(false);
+  const prevCreatorIdRef = useRef("__INIT__");
+  const roomSnapshotRef = useRef(null);
+  useEffect(() => { roomSnapshotRef.current = room; }, [room]);
 
   async function doLeave() {
     const rid = roomIdRef.current;
@@ -718,7 +722,8 @@ export default function PlanningPoker() {
     } catch(e) { console.error("leaveRoom error", e); }
     intentionalLeaveRef.current = true; // tell beforeunload not to fire
     // Save last room details for rejoin
-    setLastRoom({ roomId: roomIdRef.current, name: me?.name || myName, role: me?.role || myRole });
+    const meNow = roomSnapshotRef.current?.players?.[myId];
+    setLastRoom({ roomId: roomIdRef.current, name: meNow?.name || myName, role: meNow?.role || myRole });
     setRoomId(null); setRoom(null); setScreen("home"); setShowLeaveConfirm(false);
     window.history.replaceState(null, "", window.location.pathname);
   }
@@ -834,7 +839,15 @@ export default function PlanningPoker() {
 
   // Auto-reset session if all devs leave during an active vote
   useEffect(() => {
-    if (!allDevsLeft || !canControl || !roomId) return;
+    const _votingStarted = room?.votingStarted || false;
+    const _revealed = room?.revealed || false;
+    const _players = room?.players || {};
+    const _isPO = myRole === "PO";
+    const _hasDevJoined = Object.values(_players).some(p => ["PEGA","QA","ACM"].includes(p.role) && p.squad !== null);
+    const _allDevsLeft = _votingStarted && !_revealed && !_hasDevJoined;
+    const _isCreator = room?.creatorId === myId;
+    const _canControl = _isCreator || _isPO;
+    if (!_allDevsLeft || !_canControl || !roomId) return;
     // Small delay so the UI can show the empty state first
     const t = setTimeout(async () => {
       await mutateRoom(r => {
@@ -845,10 +858,9 @@ export default function PlanningPoker() {
       setStoryInput("");
     }, 1500);
     return () => clearTimeout(t);
-  }, [allDevsLeft, canControl, roomId]);
+  }, [room?.votingStarted, room?.revealed, room?.players, room?.creatorId, myRole, myId, roomId]);
 
   // Detect creator changes
-  const prevCreatorIdRef = useRef("__INIT__"); // sentinel so first run is skipped
   useEffect(() => {
     if (!room || !roomId) return;
     const prevId = prevCreatorIdRef.current;
@@ -867,10 +879,7 @@ export default function PlanningPoker() {
     prevCreatorIdRef.current = currId;
   }, [room?.creatorId]);
 
-  // Keep a snapshot of the latest room data for use in beforeunload
-  const roomSnapshotRef = useRef(null);
-  useEffect(() => { roomSnapshotRef.current = room; }, [room]);
-  const intentionalLeaveRef = useRef(false); // prevents beforeunload double-firing
+  // roomSnapshotRef moved to top of component
 
   // Tab/browser close — use keepalive fetch to PATCH Supabase directly
   useEffect(() => {
