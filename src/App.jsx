@@ -16,8 +16,14 @@ const CARD_INFO = {
   "20":  { label: "Too big",      desc: "Huge and hard to estimate confidently. Strongly recommend splitting this story." },
   "☕":  { label: "Need a break", desc: "More context needed. Let's talk before we point this one." },
 };
-const SQUADS = ["PEGA", "QA", "ACM"];
-const ROLES = ["PO", "PEGA", "QA", "ACM"];
+const LIFECYCLE_SQUADS = ["PEGA", "QA", "ACM"];
+const LIFECYCLE_ROLES = ["PO", "PEGA", "QA", "ACM"];
+
+// Detect variant from URL — ?v=lifecycle uses fixed squads, default is generic
+function getVariant() {
+  try { return new URLSearchParams(window.location.search).get("v") || "generic"; }
+  catch { return "generic"; }
+}
 
 // 🎨 Balanced palette — solid, clean, fun but professional
 const C = {
@@ -355,7 +361,7 @@ async function upsertRoom(id, roomData) {
 }
 
 // ── SNAPSHOT ─────────────────────────────────────────────────
-function SnapshotModal({ room, onClose }) {
+function SnapshotModal({ room, onClose, squads }) {
   const snapRef = useRef(null);
   function printSnap() {
     const el = snapRef.current; if (!el) return;
@@ -367,7 +373,7 @@ function SnapshotModal({ room, onClose }) {
   const story = room.story || "(No story set)";
   const squadAgreedPoints = room.squadAgreedPoints || {};
   const date = new Date().toLocaleString("en-SG", { dateStyle: "medium", timeStyle: "short" });
-  const squadsWithVotes = SQUADS.filter(sq => Object.values(players).some(p => p.squad === sq && p.vote !== null));
+  const squadsWithVotes = squads.filter(sq => Object.values(players).some(p => p.squad === sq && p.vote !== null));
   return (
     <div className="snap-overlay fade-in" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="snap-modal slide-up">
@@ -386,13 +392,13 @@ function SnapshotModal({ room, onClose }) {
             <div>
               <div className="snap-al">Agreed Story Points</div>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 8 }}>
-                {SQUADS.map(sq => squadAgreedPoints[sq] ? (
+                {squads.map(sq => squadAgreedPoints[sq] ? (
                   <div key={sq} style={{ textAlign: "center" }}>
                     <div style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{sq}</div>
                     <div style={{ fontFamily: "Inter,sans-serif", fontSize: "2rem", fontWeight: 800, color: "white", lineHeight: 1 }}>{squadAgreedPoints[sq]}</div>
                   </div>
                 ) : null)}
-                {!SQUADS.some(sq => squadAgreedPoints[sq]) && <div className="snap-av" style={{ opacity: 0.5, fontSize: "1.8rem" }}>Not set yet</div>}
+                {!squads.some(sq => squadAgreedPoints[sq]) && <div className="snap-av" style={{ opacity: 0.5, fontSize: "1.8rem" }}>Not set yet</div>}
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -403,7 +409,7 @@ function SnapshotModal({ room, onClose }) {
             </div>
           </div>
           <div className="snap-squads">
-            {SQUADS.map(sq => {
+            {squads.map(sq => {
               const stats = squadStats(players, sq, true);
               const sqPlayers = Object.entries(players).filter(([, p]) => p.squad === sq).sort((a, b) => a[1].name.localeCompare(b[1].name));
               if (sqPlayers.length === 0) return null;
@@ -439,6 +445,8 @@ function SnapshotModal({ room, onClose }) {
 // ── MAIN APP ─────────────────────────────────────────────────
 export default function PlanningPoker() {
   const [screen, setScreen] = useState("home");
+  const [isLifecycle] = useState(() => getVariant() === "lifecycle");
+  const [showSquadTabs, setShowSquadTabs] = useState(false); // generic mode: host toggles tabs
   const [myName, setMyName] = useState("");
   const [myRole, setMyRole] = useState("");
   const [roomInput, setRoomInput] = useState("");
@@ -600,7 +608,7 @@ export default function PlanningPoker() {
     };
     try {
       await upsertRoom(id, initial);
-      setActiveSquad(effectiveSquad || "PEGA"); setRoomId(id); setRoom(initial); setScreen("game"); setShowCreatorWelcome(true);
+      setActiveSquad(effectiveSquad || (isLifecycle ? "PEGA" : effectiveSquad)); setRoomId(id); setRoom(initial); setScreen("game"); setShowCreatorWelcome(true);
       window.history.replaceState(null, "", `?room=${id}`);
     } catch { setError("Couldn't create the room — check your connection and try again!"); }
     setLoading(false);
@@ -649,8 +657,8 @@ export default function PlanningPoker() {
         if (!r.creatorId) { r.creatorId = myId; r.hostKey = joiningKey; }
       }
       await upsertRoom(id, r);
-      setActiveSquad(effectiveSquad || "PEGA"); setRoomId(id); setRoom(r); setScreen("game");
-      window.history.replaceState(null, "", `?room=${id}`);
+      setActiveSquad(effectiveSquad || null); setRoomId(id); setRoom(r); setScreen("game");
+      window.history.replaceState(null, "", `?room=${id}${isLifecycle ? '&v=lifecycle' : ''}`);
     } catch { setError("Something went wrong — check your connection and try again."); }
     setLoading(false);
   }
@@ -688,7 +696,8 @@ export default function PlanningPoker() {
     await mutateRoom(r => {
       const numericVotes = Object.values(r.players).map(p => parseFloat(p.vote)).filter(v => !isNaN(v));
       const squads = {};
-      SQUADS.forEach(sq => { const s = squadStats(r.players, sq, true); if (s && s.count > 0) squads[sq] = s; });
+      const dynamicSquads = isLifecycle ? LIFECYCLE_SQUADS : [...new Set(Object.values(r.players).map(p => p.squad).filter(Boolean))];
+      dynamicSquads.forEach(sq => { const s = squadStats(r.players, sq, true); if (s && s.count > 0) squads[sq] = s; });
       const history = r.revealed && r.story
         ? [{ story: r.story, squadAgreedPoints: r.squadAgreedPoints || {}, avg: avg(numericVotes), squads, ts: Date.now() }, ...(r.history || [])].slice(0, 10)
         : (r.history || []);
@@ -765,7 +774,7 @@ export default function PlanningPoker() {
       }
       await upsertRoom(rid, r);
       setMyName(name); setMyRole(role);
-      setActiveSquad(effectiveSquad || "PEGA");
+      setActiveSquad(effectiveSquad || null);
       // Initialise the ref to current creatorId BEFORE setting roomId
       // so the useEffect doesn't fire a false isNewCreator on self-rejoin
       prevCreatorIdRef.current = r.creatorId || "__INIT__";
@@ -855,7 +864,7 @@ export default function PlanningPoker() {
     await upsertRoom(roomId, updatedRoom);
     setMyName(editName.trim());
     setMyRole(editRole);
-    if (editRole !== myRole) setActiveSquad(effectiveSquad || "PEGA");
+    if (editRole !== myRole) setActiveSquad(effectiveSquad || null);
     setShowEditProfile(false);
   }
 
@@ -865,7 +874,9 @@ export default function PlanningPoker() {
     const _revealed = room?.revealed || false;
     const _players = room?.players || {};
     const _isPO = myRole === "PO";
-    const _hasDevJoined = Object.values(_players).some(p => ["PEGA","QA","ACM"].includes(p.role) && p.squad !== null);
+    const _hasDevJoined = isLifecycle
+      ? Object.values(_players).some(p => ["PEGA","QA","ACM"].includes(p.role) && p.squad !== null)
+      : Object.values(_players).some(p => p.squad !== null && p.role !== "PO");
     const _allDevsLeft = _votingStarted && !_revealed && !_hasDevJoined;
     const _isCreator = room?.creatorId === myId;
     const _canControl = _isCreator || _isPO;
@@ -943,7 +954,8 @@ export default function PlanningPoker() {
 
   function copyRoomId() { navigator.clipboard.writeText(roomId).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1500); }
   function shareUrl() {
-    const url = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+    const vParam = isLifecycle ? "&v=lifecycle" : "";
+    const url = `${window.location.origin}${window.location.pathname}?room=${roomId}${vParam}`;
     navigator.clipboard.writeText(url).catch(() => {});
     setCopiedUrl(true); setTimeout(() => setCopiedUrl(false), 2000);
   }
@@ -954,7 +966,7 @@ export default function PlanningPoker() {
   const myVote = me?.vote ?? null;
   const revealed = room?.revealed || false;
   const effectiveSquad = myRole === "PO" ? null : myRole;
-  const resolvedSquad = activeSquad || "PEGA";
+  const resolvedSquad = activeSquad || SQUADS[0] || null;
   const squadPlayers = Object.entries(players).filter(([, p]) => p.squad === resolvedSquad);
   const anyVoted = Object.values(players).some(p => p.vote !== null);
   const activeStats = squadStats(players, resolvedSquad, revealed);
@@ -966,7 +978,14 @@ export default function PlanningPoker() {
   const isPO = myRole === "PO";
   const votingStarted = room?.votingStarted || false;
   const squadAgreedPoints = room?.squadAgreedPoints || {};
-  const hasDevJoined = Object.values(players).some(p => ["PEGA","QA","ACM"].includes(p.role) && p.squad !== null);
+  // Dynamic squads — fixed for lifecycle, derived from players for generic
+  const SQUADS = isLifecycle
+    ? LIFECYCLE_SQUADS
+    : [...new Set(Object.values(players).map(p => p.squad).filter(Boolean))].sort();
+  const ROLES = isLifecycle ? LIFECYCLE_ROLES : null; // null = freetext in generic
+  const hasDevJoined = isLifecycle
+    ? Object.values(players).some(p => ["PEGA","QA","ACM"].includes(p.role) && p.squad !== null)
+    : Object.values(players).some(p => p.squad !== null && p.role !== "PO");
   // True if voting was started but all devs have since left
   const allDevsLeft = votingStarted && !revealed && !hasDevJoined;
   const isMySquadTab = effectiveSquad === resolvedSquad;
@@ -975,10 +994,13 @@ export default function PlanningPoker() {
     (room?.hostKey && room.hostKey === myNameRoleKey) ||
     (room?.originalCreatorKey && room.originalCreatorKey === myNameRoleKey && !room?.creatorId);
   const canControl = isCreator || isPO;
-  const SQUAD_ORDER = { PEGA: 0, QA: 1, ACM: 2 };
+  const SQUAD_ORDER = isLifecycle ? { PEGA: 0, QA: 1, ACM: 2 } : Object.fromEntries(SQUADS.map((s, i) => [s, i]));
   const pendingVoters = Object.values(players)
     .filter(p => p.role !== "PO" && p.vote === null)
     .sort((a, b) => { const sa = SQUAD_ORDER[a.squad] ?? 99, sb = SQUAD_ORDER[b.squad] ?? 99; return sa !== sb ? sa - sb : a.name.localeCompare(b.name); });
+  const displayPlayers = (!isLifecycle && !showSquadTabs)
+    ? Object.entries(players)
+    : (resolvedSquad ? squadPlayers : Object.entries(players));
 
   return (
     <>
@@ -1035,24 +1057,40 @@ export default function PlanningPoker() {
                   </div>
                   <div className="field">
                     <div className="label">Your Role</div>
-                    <div className="role-grid">
-                      {ROLES.map(r => (
-                        <div key={r} style={{ "--role-color": ROLE_COLORS[r]?.bg, "--role-glow": ROLE_COLORS[r]?.bgGlow }}
-                          className={`role-pill ${myRole === r ? "selected" : ""}`}
-                          onClick={() => setMyRole(r)}>{r}</div>
-                      ))}
-                    </div>
+                    {isLifecycle ? (
+                      <div className="role-grid">
+                        {LIFECYCLE_ROLES.map(r => (
+                          <div key={r} style={{ "--role-color": ROLE_COLORS[r]?.bg, "--role-glow": ROLE_COLORS[r]?.bgGlow }}
+                            className={`role-pill ${myRole === r ? "selected" : ""}`}
+                            onClick={() => setMyRole(r)}>{r}</div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                          <div style={{"--role-color": ROLE_COLORS.PO.bg, "--role-glow": ROLE_COLORS.PO.bgGlow}}
+                            className={`role-pill ${myRole === "PO" ? "selected" : ""}`}
+                            onClick={() => setMyRole("PO")}>PO</div>
+                        </div>
+                        <input value={myRole === "PO" ? "" : myRole}
+                          onChange={e => setMyRole(e.target.value.toUpperCase().slice(0,12))}
+                          placeholder="Your squad / role (e.g. Frontend, iOS...)"
+                          disabled={myRole === "PO"}
+                          style={myRole === "PO" ? {opacity:0.4} : {}}
+                        />
+                      </div>
+                    )}
+                    {myRole && myRole !== "PO" && (
+                      <div className="fade-in" style={{ fontSize: "0.8rem", color: ROLE_COLORS[myRole]?.bg || C.purpleDark, background: ROLE_COLORS[myRole]?.bgLight || C.purpleLight, padding: "10px 14px", borderRadius: 10, border: `2px solid ${(ROLE_COLORS[myRole]?.bg || C.purpleDark)}33`, fontWeight: 600 }}>
+                        You'll be voting with the <strong>{myRole}</strong> squad. Let's goooo 🚀
+                      </div>
+                    )}
+                    {myRole === "PO" && (
+                      <div className="fade-in" style={{ fontSize: "0.8rem", color: C.purple, background: C.purpleLight, padding: "10px 14px", borderRadius: 10, border: `2px solid rgba(124,58,237,0.2)`, fontWeight: 600 }}>
+                        PO mode 🎯 — you're the referee. Watch the chaos, pick the number.
+                      </div>
+                    )}
                   </div>
-                  {myRole && myRole !== "PO" && (
-                    <div className="fade-in" style={{ fontSize: "0.8rem", color: ROLE_COLORS[myRole]?.bg, background: ROLE_COLORS[myRole]?.bgLight, padding: "10px 14px", borderRadius: 10, border: `2px solid ${ROLE_COLORS[myRole]?.bg}33`, fontWeight: 600 }}>
-                      You'll be voting with the <strong>{myRole}</strong> squad. Let's goooo 🚀
-                    </div>
-                  )}
-                  {myRole === "PO" && (
-                    <div className="fade-in" style={{ fontSize: "0.8rem", color: C.purple, background: C.purpleLight, padding: "10px 14px", borderRadius: 10, border: `2px solid rgba(124,58,237,0.2)`, fontWeight: 600 }}>
-                      PO mode 🎯 — you're the referee. Watch the chaos, pick the number.
-                    </div>
-                  )}
                   {!roomInput ? (
                     <>
                       <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={createRoom}
@@ -1261,14 +1299,30 @@ export default function PlanningPoker() {
                     </div>
                     <div className="field">
                       <div className="label">Your Role</div>
-                      <div className="role-grid">
-                        {ROLES.map(r => (
-                          <div key={r}
-                            style={{"--role-color": ROLE_COLORS[r]?.bg, "--role-glow": ROLE_COLORS[r]?.bgGlow}}
-                            className={`role-pill ${editRole === r ? "selected" : ""}`}
-                            onClick={() => { setEditRole(r); setEditError(""); }}>{r}</div>
-                        ))}
-                      </div>
+                      {isLifecycle ? (
+                        <div className="role-grid">
+                          {LIFECYCLE_ROLES.map(r => (
+                            <div key={r}
+                              style={{"--role-color": ROLE_COLORS[r]?.bg, "--role-glow": ROLE_COLORS[r]?.bgGlow}}
+                              className={`role-pill ${editRole === r ? "selected" : ""}`}
+                              onClick={() => { setEditRole(r); setEditError(""); }}>{r}</div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                          <div style={{display:"flex",gap:8}}>
+                            <div style={{"--role-color": ROLE_COLORS.PO.bg, "--role-glow": ROLE_COLORS.PO.bgGlow}}
+                              className={`role-pill ${editRole === "PO" ? "selected" : ""}`}
+                              onClick={() => { setEditRole("PO"); setEditError(""); }}>PO</div>
+                          </div>
+                          <input value={editRole === "PO" ? "" : editRole}
+                            onChange={e => { setEditRole(e.target.value.toUpperCase().slice(0,12)); setEditError(""); }}
+                            placeholder="Your squad / role (e.g. Frontend, iOS...)"
+                            disabled={editRole === "PO"}
+                            style={editRole === "PO" ? {opacity:0.4} : {}}
+                          />
+                        </div>
+                      )}
                     </div>
                     {editRole && editRole !== myRole && (
                       <div style={{fontSize:"0.78rem",color:C.orange,background:C.orangeLight,padding:"8px 12px",borderRadius:8,border:`1px solid rgba(249,115,22,0.2)`}}>
@@ -1349,24 +1403,56 @@ export default function PlanningPoker() {
               </div>
 
               {/* Squad Tabs */}
-              <div className="squad-tabs slide-up">
-                {SQUADS.map(sq => (
-                  <button key={sq} className={`squad-tab ${resolvedSquad === sq ? "active" : ""} ${squadComplete(sq) ? "complete" : ""}`}
-                    onClick={() => setActiveSquad(sq)}>
-                    {sq}{squadComplete(sq) && <span className="tab-check">✓</span>}
-                    <span style={{ fontSize: "0.62rem", marginLeft: 4, opacity: 0.6 }}>({Object.values(players).filter(p => p.squad === sq).length})</span>
-                  </button>
-                ))}
-              </div>
+              {isLifecycle ? (
+                <div className="squad-tabs slide-up">
+                  {LIFECYCLE_SQUADS.map(sq => (
+                    <button key={sq} className={`squad-tab ${resolvedSquad === sq ? "active" : ""} ${squadComplete(sq) ? "complete" : ""}`}
+                      onClick={() => setActiveSquad(sq)}>
+                      {sq}
+                      <span style={{ fontSize: "0.62rem", marginLeft: 4, opacity: 0.6 }}>({Object.values(players).filter(p => p.squad === sq).length})</span>
+                      {squadComplete(sq) && <span className="tab-check">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {isCreator && (
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <button className="edit-profile-btn" onClick={() => setShowSquadTabs(t => !t)}>
+                        {showSquadTabs ? "🗂️ Hide squad tabs" : "🗂️ Show squad tabs"}
+                      </button>
+                      {showSquadTabs && SQUADS.length === 0 && (
+                        <span style={{fontSize:"0.75rem",color:C.slate,fontStyle:"italic"}}>Tabs appear once members join with different roles</span>
+                      )}
+                    </div>
+                  )}
+                  {showSquadTabs && SQUADS.length > 0 && (
+                    <div className="squad-tabs slide-up">
+                      {SQUADS.map(sq => (
+                        <button key={sq} className={`squad-tab ${resolvedSquad === sq ? "active" : ""} ${squadComplete(sq) ? "complete" : ""}`}
+                          onClick={() => setActiveSquad(sq)}>
+                          {sq}
+                          <span style={{ fontSize: "0.62rem", marginLeft: 4, opacity: 0.6 }}>({Object.values(players).filter(p => p.squad === sq).length})</span>
+                          {squadComplete(sq) && <span className="tab-check">✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
 
               {/* Players */}
               <div className="slide-up">
-                <div className="section-label">{resolvedSquad} Crew</div>
-                {squadPlayers.length === 0 ? (
-                  <div style={{ color: C.steel, fontSize: "0.83rem", padding: "12px 0" }}>👻 No {resolvedSquad} folks yet — share the invite link!</div>
+                <div className="section-label">
+                  {(!isLifecycle && !showSquadTabs) ? "The Crew" : `${resolvedSquad || "All"} Crew`}
+                </div>
+                {displayPlayers.length === 0 ? (
+                  <div style={{ color: C.steel, fontSize: "0.83rem", padding: "12px 0" }}>
+                    👻 No one here yet — share the invite link!
+                  </div>
                 ) : (
                   <div className="players-grid">
-                    {squadPlayers.map(([pid, p]) => (
+                    {displayPlayers.map(([pid, p]) => (
                       <div key={pid}
                         style={{
                           "--squad-color": ROLE_COLORS[p.squad]?.bg || C.green,
@@ -1406,9 +1492,7 @@ export default function PlanningPoker() {
               {revealed && (
                 <div className="agreed-squads-section slide-up">
                   <div className="section-label">Lock in the points 🔒</div>
-                  {SQUADS.map(sq => {
-                    const sqHasVotes = Object.values(players).some(p => p.squad === sq && p.vote !== null);
-                    if (!sqHasVotes) return null;
+                  {SQUADS.filter(sq => Object.values(players).some(p => p.squad === sq && p.vote !== null)).map(sq => {
                     return (
                       <div key={sq} className="agreed-squad-row">
                         <div className={`agreed-squad-label ${sq}`}>{sq}</div>
@@ -1541,13 +1625,13 @@ export default function PlanningPoker() {
                   ))}
                 </div>
               )}
-              </div>
+              </div>{/* end display:contents */}
             </>
           )}
         </div>
       </div>
 
-      {showSnapshot && room && <SnapshotModal room={room} onClose={() => setShowSnapshot(false)} />}
+      {showSnapshot && room && <SnapshotModal room={room} onClose={() => setShowSnapshot(false)} squads={SQUADS.length > 0 ? SQUADS : [...new Set(Object.values(players).map(p=>p.squad).filter(Boolean))]} />}
       {hoveredCard && CARD_INFO[hoveredCard] && (
         <div className="card-tooltip-fixed" style={{
           left: Math.min(tooltipPos.x - 105, window.innerWidth - 230),
