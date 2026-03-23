@@ -377,7 +377,7 @@ function SnapshotModal({ room, onClose }) {
         </div>
         <div id="snap-card" ref={snapRef}>
           <div className="snap-hdr">
-            <div className="snap-brand"><div className="snap-logo">P</div><div className="snap-brand-name">Planit Poker 🃏</div></div>
+            <div className="snap-brand"><div className="snap-logo">S</div><div className="snap-brand-name">StoryScore</div></div>
             <div className="snap-date">{date}</div>
           </div>
           <div className="snap-sl">Story / Feature</div>
@@ -425,7 +425,7 @@ function SnapshotModal({ room, onClose }) {
               );
             })}
           </div>
-          <div className="snap-footer"><span>Made with Planit Poker 🃏</span><span>Points = vibes, not promises 😄</span></div>
+          <div className="snap-footer"><span>Made with StoryScore 🎯</span><span>Points = vibes, not promises 😄</span></div>
         </div>
         <div className="snap-actions">
           <button className="btn btn-outline" onClick={onClose}>Close</button>
@@ -954,7 +954,7 @@ export default function PlanningPoker() {
       <div className="app">
         <nav className="nav">
           <div className="nav-brand">
-            <div className="nav-logo">Planit<span> Poker</span></div>
+            <div className="nav-logo">Story<span>Score</span></div>
           </div>
           <div className="nav-right">
             {screen === "game" && me && (
@@ -1395,7 +1395,7 @@ export default function PlanningPoker() {
                     </button>
                   )}
                   {votingStarted && !revealed && !canControl && (
-                    <div className="po-observer">🃏 Voting is live — pick your card below!</div>
+                    <div className="po-observer">🗳️ Voting is live — cast your score below!</div>
                   )}
                   {revealed && canControl && (
                     <button className="btn btn-fun" onClick={newRound}>🔄 Next Round!</button>
@@ -1408,7 +1408,7 @@ export default function PlanningPoker() {
               {!revealed && !isPO && isMySquadTab && votingStarted && (
                 <div className="voting-panel slide-up">
                   <div className="voting-hdr">
-                    <div className="voting-title">🃏 Your Turn — {resolvedSquad}</div>
+                    <div className="voting-title">🎯 Your Turn — {resolvedSquad}</div>
                     {myVote && <div className="your-vote">You picked: {myVote}</div>}
                   </div>
                   <div className="cards-row">
