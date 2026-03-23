@@ -458,6 +458,7 @@ export default function PlanningPoker() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showPassHost, setShowPassHost] = useState(false);
   const [passedHostTo, setPassedHostTo] = useState(null); // name of who we passed to
+  const intentionalPassRef = useRef(false); // sync flag to suppress OG reclaim modal
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editError, setEditError] = useState("");
@@ -776,6 +777,7 @@ export default function PlanningPoker() {
   }
 
   async function passHost(newHostId) {
+    intentionalPassRef.current = true; // set synchronously before any await
     const freshRoom = await fetchRoom(roomId);
     if (!freshRoom) return;
     const newHostPlayer = freshRoom.players?.[newHostId];
@@ -789,7 +791,8 @@ export default function PlanningPoker() {
     setRoom(updated);
     await upsertRoom(roomId, updated);
     setShowPassHost(false);
-    setPassedHostTo(newHostPlayer.name); // show confirmation instead of OG modal
+    setPassedHostTo(newHostPlayer.name);
+    intentionalPassRef.current = false; // reset after
   }
 
   async function openEditProfile() {
@@ -893,7 +896,7 @@ export default function PlanningPoker() {
       // Host taken FROM me (I was host, now someone else is — OG reclaimed)
       if (prevId === myId && currId !== null && currId !== myId) {
         // Only show "OG is back" if we didn't intentionally pass host
-        if (!passedHostTo) setOriginalCreatorReclaimed(true);
+        if (!intentionalPassRef.current) setOriginalCreatorReclaimed(true);
       }
     }
     prevCreatorIdRef.current = currId;
