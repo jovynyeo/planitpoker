@@ -932,6 +932,8 @@ export default function PlanningPoker() {
     : {};
   const squadComplete = sq => revealed && Object.values(players).some(p => p.squad === sq && p.vote !== null);
   const isPO = myRole === "PO";
+  const votingStarted = room?.votingStarted || false;
+  const squadAgreedPoints = room?.squadAgreedPoints || {};
   const hasDevJoined = Object.values(players).some(p => ["PEGA","QA","ACM"].includes(p.role) && p.squad !== null);
   // True if voting was started but all devs have since left
   const allDevsLeft = votingStarted && !revealed && !hasDevJoined;
@@ -941,8 +943,6 @@ export default function PlanningPoker() {
     (room?.hostKey && room.hostKey === myNameRoleKey) ||
     (room?.originalCreatorKey && room.originalCreatorKey === myNameRoleKey && !room?.creatorId);
   const canControl = isCreator || isPO;
-  const votingStarted = room?.votingStarted || false;
-  const squadAgreedPoints = room?.squadAgreedPoints || {};
   const SQUAD_ORDER = { PEGA: 0, QA: 1, ACM: 2 };
   const pendingVoters = Object.values(players)
     .filter(p => p.role !== "PO" && p.vote === null)
