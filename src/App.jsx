@@ -1436,7 +1436,7 @@ export default function PlanningPoker() {
               )}
 
               {!revealed && isPO && votingStarted && (
-                <div className="po-observer">👁️ In stealth mode — watching everyone's poker face. Votes hidden until reveal!</div>
+                <div className="po-observer">👁️ In stealth mode — watching everyone's estimates. Votes hidden until reveal!</div>
               )}
               {!revealed && !isPO && !isMySquadTab && votingStarted && (
                 <div className="po-observer">👆 Switch to the <strong>{effectiveSquad}</strong> tab to cast your vote!</div>
