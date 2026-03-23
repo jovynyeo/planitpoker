@@ -1,5 +1,6 @@
 param(
-    [string]$CommitMessage = "Deploy to staging"
+    [string]$CommitMessage = "Deploy to staging",
+    [string]$WebhookUrl = "REPLACE_WITH_YOUR_NEW_WEBHOOK_URL"
 )
 
 Write-Host "🚀 Deploying to Vercel Staging..." -ForegroundColor Green
@@ -16,8 +17,14 @@ git push origin staging
 
 # Trigger Vercel deployment
 Write-Host "🔄 Triggering Vercel deployment..." -ForegroundColor Cyan
+if ($WebhookUrl -eq "REPLACE_WITH_YOUR_NEW_WEBHOOK_URL") {
+    Write-Host "❌ Please update the WebhookUrl parameter with your new Vercel webhook URL" -ForegroundColor Red
+    Write-Host "   Get it from: Vercel Dashboard → storyscore-stg → Settings → Git → Deploy Hooks" -ForegroundColor Yellow
+    exit 1
+}
+
 try {
-    $response = Invoke-WebRequest -Uri "https://api.vercel.com/v1/integrations/deploy/prj_lRYOhlEizpUUVzw0EYcfgPLV25Mm/iSksnsbBA3" -Method POST -UseBasicParsing
+    $response = Invoke-WebRequest -Uri $WebhookUrl -Method POST -UseBasicParsing
     Write-Host "✅ Deployment triggered successfully!" -ForegroundColor Green
 } catch {
     Write-Host "❌ Failed to trigger deployment: $($_.Exception.Message)" -ForegroundColor Red
